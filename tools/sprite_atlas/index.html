@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sprite Sheet → JSON (Atlas Builder)</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin:0; background:#0f1115; color:#e6e6e6; font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }
+    .wrap { display:grid; grid-template-columns: 1fr 360px; gap:16px; padding:16px; min-height:100vh; box-sizing:border-box; }
+    @media (max-width: 980px) { .wrap { grid-template-columns: 1fr; } }
+    .panel { background:#151a21; border:1px solid #223041; border-radius:10px; padding:12px 14px; }
+    h1 { font-size:18px; margin:6px 0 12px; }
+    h2 { font-size:15px; margin:12px 0 8px; }
+    label { display:block; margin:6px 0 2px; opacity:0.9; }
+    input[type="number"], input[type="text"], select { width:100%; box-sizing:border-box; background:#0e1218; color:#e6e6e6; border:1px solid #2b3442; border-radius:6px; padding:6px 8px; }
+    input[type="file"] { width:100%; }
+    button { background:#17202b; color:#e6e6e6; border:1px solid #2b3442; border-radius:8px; padding:8px 10px; cursor:pointer; }
+    button.primary { background:#1f2c3a; border-color:#3a516b; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+    .drop { border:2px dashed #2b3442; border-radius:8px; padding:12px; text-align:center; margin:8px 0; cursor: pointer; }
+    .thumb { width:24px; height:24px; image-rendering: pixelated; background:#0e1218; border:1px solid #2b3442; border-radius:4px; }
+    .frames { display:grid; grid-template-columns: 28px 1fr; gap:8px; max-height:40vh; overflow:auto; border:1px solid #2b3442; border-radius:8px; padding:8px; }
+    .frames input { width:100%; }
+    .frame-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+    .frame-row input[type="number"] { width:70px; }
+    .del { background:#3a1f24; border-color:#6b3a46; }
+    canvas { background:#121821; border:1px solid #2b3442; image-rendering: pixelated; width:100%; height:auto; }
+    .grid-toggle { display:flex; gap:8px; align-items:center; margin:6px 0; }
+    .help { opacity:0.75; font-size:12px; }
+  </style>
+  <script>
+    // Utility: download a string as a file
+    function download(name, text) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], {type: 'application/json'}));
+      a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+  </script>
+  </head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <canvas id="cv" width="800" height="600" aria-label="preview"></canvas>
+      <div class="grid-toggle">
+        <input id="showGrid" type="checkbox" checked />
+        <label for="showGrid">Show grid overlay</label>
+      </div>
+      <div class="help">Tip: Use equal tile width/height for square tiles. Spacing/margin are optional.</div>
+    </div>
+    <div class="panel">
+      <h1>Sprite Sheet → JSON</h1>
+      <div id="drop" class="drop">Click or drag a spritesheet image here</div>
+      <input id="file" type="file" accept="image/*" style="display:none" />
+
+      <div class="row">
+        <div>
+          <label>Tile width</label>
+          <input id="tw" type="number" min="1" value="40" />
+        </div>
+        <div>
+          <label>Tile height</label>
+          <input id="th" type="number" min="1" value="40" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Margin</label>
+          <input id="margin" type="number" min="0" value="0" />
+        </div>
+        <div>
+          <label>Spacing</label>
+          <input id="spacing" type="number" min="0" value="0" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Auto-names prefix</label>
+          <input id="prefix" type="text" value="tile" />
+        </div>
+        <div>
+          <label>Start index</label>
+          <input id="startIdx" type="number" min="0" value="0" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+        <button id="autoDetect">Auto-detect size</button>
+        <button id="autoName">Auto-name</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="exportJson" class="primary">Export JSON</button>
+        <button id="exportHash">Export hash-only</button>
+      </div>
+
+      <h2>Examples</h2>
+      <div class="row" style="margin-top:4px">
+        <button id="loadExample">Load Ground.png</button>
+        <div></div>
+      </div>
+
+      <h2>Frames</h2>
+      <div class="row" style="margin:4px 0 8px 0">
+        <label style="display:flex; align-items:center; gap:8px"><input id="customMode" type="checkbox" /> Custom edit mode (per-frame sizes)</label>
+        <div></div>
+      </div>
+      <div class="row" style="margin:0 0 8px 0">
+        <button id="rebuildGrid">Rebuild from grid</button>
+        <button id="addTile">Add tile</button>
+      </div>
+      <div id="frames" class="frames"></div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const cv = document.getElementById('cv');
+    const cx = cv.getContext('2d'); cx.imageSmoothingEnabled = false;
+    const ui = {
+      drop: document.getElementById('drop'),
+      file: document.getElementById('file'),
+      tw: document.getElementById('tw'),
+      th: document.getElementById('th'),
+      margin: document.getElementById('margin'),
+      spacing: document.getElementById('spacing'),
+      prefix: document.getElementById('prefix'),
+      startIdx: document.getElementById('startIdx'),
+      autoDetect: document.getElementById('autoDetect'),
+      autoName: document.getElementById('autoName'),
+      exportJson: document.getElementById('exportJson'),
+      exportHash: document.getElementById('exportHash'),
+      frames: document.getElementById('frames'),
+      showGrid: document.getElementById('showGrid'),
+    };
+
+    const state = {
+      img: null,
+      name: 'atlas',
+      w: 0, h: 0,
+      tiles: [], // {x,y,w,h,name}
+    };
+
+    // Example spritesheet in this repo
+    const EXAMPLE_SRC = '../../assets/cursedland/Ground.png';
+
+    function loadFile(file){
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        state.img = img;
+        state.name = (file.name || 'atlas').replace(/\.[^.]+$/, '');
+        state.w = img.naturalWidth; state.h = img.naturalHeight;
+        URL.revokeObjectURL(url);
+        buildTiles();
+        draw();
+        renderList();
+      };
+      img.src = url;
+    }
+
+    function loadUrl(url, nameHint){
+      const img = new Image();
+      img.onload = () => {
+        state.img = img;
+        const base = (nameHint || url.split('/').pop() || 'atlas').replace(/\.[^.]+$/, '');
+        state.name = base;
+        state.w = img.naturalWidth; state.h = img.naturalHeight;
+        // Try to auto-detect a common square tile size
+        autoDetect();
+        draw();
+        renderList();
+      };
+      img.onerror = () => console.warn('Failed to load example spritesheet:', url);
+      img.src = url;
+    }
+
+    function buildTiles(){
+      if (!state.img) return;
+      const tw = +ui.tw.value|0, th = +ui.th.value|0;
+      const margin = +ui.margin.value|0, spacing = +ui.spacing.value|0;
+      const cols = Math.floor((state.w - margin*2 + spacing) / (tw + spacing));
+      const rows = Math.floor((state.h - margin*2 + spacing) / (th + spacing));
+      state.tiles = [];
+      for (let r=0;r<rows;r++){
+        for (let c=0;c<cols;c++){
+          const x = margin + c*(tw+spacing);
+          const y = margin + r*(th+spacing);
+          state.tiles.push({ x, y, w: tw, h: th, name: `${ui.prefix.value}_${(+ui.startIdx.value + state.tiles.length)}` });
+        }
+      }
+    }
+
+    function draw(){
+      cx.clearRect(0,0,cv.width,cv.height);
+      if (!state.img) return;
+      // Fit image into canvas while preserving pixel look
+      const scale = Math.min(cv.width/state.w, cv.height/state.h);
+      const dw = Math.floor(state.w*scale), dh = Math.floor(state.h*scale);
+      const dx = Math.floor((cv.width-dw)/2), dy = Math.floor((cv.height-dh)/2);
+      cx.drawImage(state.img, 0,0,state.w,state.h, dx,dy,dw,dh);
+      if (ui.showGrid.checked) {
+        // Draw rectangles for all current tiles (supports custom sizes)
+        cx.save();
+        cx.globalAlpha = 0.8;
+        cx.strokeStyle = '#3a516b';
+        cx.lineWidth = 1;
+        state.tiles.forEach((t,i)=>{
+          const gx = dx + Math.floor(t.x*scale);
+          const gy = dy + Math.floor(t.y*scale);
+          const gw = Math.floor(t.w*scale);
+          const gh = Math.floor(t.h*scale);
+          cx.strokeRect(gx+0.5, gy+0.5, gw, gh);
+        });
+        cx.restore();
+      }
+    }
+
+    function renderList(){
+      ui.frames.innerHTML = '';
+      if (!state.img) return;
+      state.tiles.forEach((t, i) => {
+        const rowThumb = document.createElement('canvas');
+        rowThumb.width = 24; rowThumb.height = 24; rowThumb.className = 'thumb';
+        const rx = rowThumb.getContext('2d'); rx.imageSmoothingEnabled = false;
+        // draw tile as 24x24 thumbnail
+        const scale = Math.min(24/t.w, 24/t.h);
+        const dw = Math.floor(t.w*scale), dh = Math.floor(t.h*scale);
+        const dx = Math.floor((24-dw)/2), dy = Math.floor((24-dh)/2);
+        rx.drawImage(state.img, t.x, t.y, t.w, t.h, dx, dy, dw, dh);
+
+        const row = document.createElement('div');
+        row.className = 'frame-row';
+
+        const name = document.createElement('input');
+        name.type = 'text'; name.value = t.name; name.placeholder = `name_${i}`;
+        name.addEventListener('input', () => { t.name = name.value; });
+
+        const ix = document.createElement('input'); ix.type = 'number'; ix.value = t.x; ix.title = 'x';
+        const iy = document.createElement('input'); iy.type = 'number'; iy.value = t.y; iy.title = 'y';
+        const iw = document.createElement('input'); iw.type = 'number'; iw.value = t.w; iw.title = 'w';
+        const ih = document.createElement('input'); ih.type = 'number'; ih.value = t.h; ih.title = 'h';
+        function applyRect(){
+          t.x = Math.max(0, ix.value|0);
+          t.y = Math.max(0, iy.value|0);
+          t.w = Math.max(1, iw.value|0);
+          t.h = Math.max(1, ih.value|0);
+          draw();
+          // update thumb
+          const s2 = Math.min(24/t.w, 24/t.h);
+          const dw2 = Math.floor(t.w*s2), dh2 = Math.floor(t.h*s2);
+          const dx2 = Math.floor((24-dw2)/2), dy2 = Math.floor((24-dh2)/2);
+          rx.clearRect(0,0,24,24);
+          rx.drawImage(state.img, t.x, t.y, t.w, t.h, dx2, dy2, dw2, dh2);
+        }
+        ;[ix,iy,iw,ih].forEach(inp=> inp.addEventListener('change', applyRect));
+
+        const del = document.createElement('button'); del.textContent = '×'; del.className = 'del';
+        del.addEventListener('click', ()=>{ state.tiles.splice(i,1); renderList(); draw(); });
+
+        row.appendChild(name);
+        row.appendChild(ix); row.appendChild(iy); row.appendChild(iw); row.appendChild(ih);
+        row.appendChild(del);
+
+        ui.frames.appendChild(rowThumb);
+        ui.frames.appendChild(row);
+      });
+    }
+
+    function autoDetect(){
+      if (!state.img) return;
+      // Try common tile sizes that evenly divide both dimensions
+      const W = state.w, H = state.h;
+      const candidates = [64, 48, 40, 32, 24, 16, 8];
+      let best = 0;
+      for (const s of candidates) { if (W % s === 0 && H % s === 0) { best = s; break; } }
+      if (!best) best = 32;
+      ui.tw.value = best; ui.th.value = best; ui.margin.value = 0; ui.spacing.value = 0;
+      buildTiles(); draw(); renderList();
+    }
+
+    function autoName(){
+      const prefix = ui.prefix.value || 'tile';
+      let idx = +ui.startIdx.value|0;
+      state.tiles.forEach(t => { t.name = `${prefix}_${idx++}`; });
+      renderList();
+    }
+
+    function buildJsonHash(){
+      // Hash-only format: { name: { x,y,w,h } }
+      const hash = {};
+      state.tiles.forEach(t => { if (t.name) hash[t.name] = { x:t.x, y:t.y, w:t.w, h:t.h }; });
+      return JSON.stringify(hash, null, 2);
+    }
+
+    function buildTexturePackerLike(){
+      // Minimal TexturePacker-style JSON
+      const frames = {};
+      state.tiles.forEach(t => {
+        if (!t.name) return;
+        frames[t.name] = {
+          frame: { x:t.x, y:t.y, w:t.w, h:t.h },
+          rotated: false,
+          trimmed: false,
+          spriteSourceSize: { x:0, y:0, w:t.w, h:t.h },
+          sourceSize: { w:t.w, h:t.h }
+        };
+      });
+      const meta = {
+        app: 'GrowingStars Atlas Builder',
+        version: '1.0',
+        image: state.name + '.png',
+        size: { w: state.w, h: state.h },
+        scale: '1'
+      };
+      return JSON.stringify({ frames, meta }, null, 2);
+    }
+
+    // Events
+    ui.drop.addEventListener('click', () => ui.file.click());
+    ui.drop.addEventListener('dragover', (e) => { e.preventDefault(); ui.drop.style.borderColor = '#7bd88f'; });
+    ui.drop.addEventListener('dragleave', () => ui.drop.style.borderColor = '#2b3442');
+    ui.drop.addEventListener('drop', (e) => {
+      e.preventDefault(); ui.drop.style.borderColor = '#2b3442';
+      const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) loadFile(f);
+    });
+    ui.file.addEventListener('change', () => ui.file.files[0] && loadFile(ui.file.files[0]));
+    ['input','change'].forEach(ev => {
+      [ui.tw, ui.th, ui.margin, ui.spacing].forEach(el => el.addEventListener(ev, ()=>{
+        // preserve custom edits by not auto-rebuilding when in custom mode
+        if (!document.getElementById('customMode').checked) { buildTiles(); draw(); renderList(); }
+      }));
+    });
+    ui.showGrid.addEventListener('change', draw);
+    document.getElementById('rebuildGrid').addEventListener('click', ()=>{ buildTiles(); draw(); renderList(); });
+    document.getElementById('addTile').addEventListener('click', ()=>{
+      const tw = +ui.tw.value|0, th = +ui.th.value|0;
+      const name = `${ui.prefix.value || 'tile'}_${(+ui.startIdx.value|0) + state.tiles.length}`;
+      state.tiles.push({ x:0, y:0, w: tw||32, h: th||32, name });
+      renderList(); draw();
+    });
+    ui.autoDetect.addEventListener('click', autoDetect);
+    ui.autoName.addEventListener('click', autoName);
+    ui.exportJson.addEventListener('click', () => download(state.name + '.json', buildTexturePackerLike()));
+    ui.exportHash.addEventListener('click', () => download(state.name + '.hash.json', buildJsonHash()));
+    document.getElementById('loadExample').addEventListener('click', () => {
+      loadUrl(EXAMPLE_SRC, 'Ground');
+      // Ground.png in this repo is a 40x40 grid; set explicitly for convenience
+      ui.tw.value = 40; ui.th.value = 40; ui.margin.value = 0; ui.spacing.value = 0;
+      buildTiles(); draw(); renderList();
+    });
+
+    // Initial blank draw
+    draw();
+
+    // Optional: allow auto-load via query (?auto=ground)
+    try {
+      const params = new URLSearchParams(location.search);
+      if ((params.get('auto') || '').toLowerCase() === 'ground') {
+        document.getElementById('loadExample').click();
+      }
+    } catch {}
+  })();
+  </script>
+  </body>
+  </html>
