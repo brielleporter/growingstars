@@ -5,13 +5,13 @@
 import { GameAssets } from '../types/gameAssets.types';
 import { CANVAS_CONFIG, SPRITE_SHEET_CONFIG } from '../configuration/gameConstants';
 import { AssetLoader } from '../assetManagement/AssetLoader';
-import { KeyboardInputManager } from '../gameSystems/inputHandling/KeyboardInputManager';
-import { MouseInputManager } from '../gameSystems/inputHandling/MouseInputManager';
-import { PlayerMovementSystem } from '../gameSystems/playerCharacter/PlayerMovementSystem';
-import { PlantManagementSystem } from '../gameSystems/plantGrowth/PlantManagementSystem';
-import { BackgroundRenderer } from '../gameSystems/rendering/BackgroundRenderer';
-import { PlantRenderer } from '../gameSystems/rendering/PlantRenderer';
-import { PlayerCharacterRenderer } from '../gameSystems/rendering/PlayerCharacterRenderer';
+import { KeyboardInputManager } from '../modules/inputHandling/KeyboardInputManager';
+import { MouseInputManager } from '../modules/inputHandling/MouseInputManager';
+import { PlayerMovementSystem } from '../modules/playerCharacter/PlayerMovementSystem';
+import { PlantManagementSystem } from '../modules/plantGrowth/PlantManagementSystem';
+import { BackgroundRenderer } from '../modules/rendering/BackgroundRenderer';
+import { PlantRenderer } from '../modules/rendering/PlantRenderer';
+import { PlayerCharacterRenderer } from '../modules/rendering/PlayerCharacterRenderer';
 
 export class GameEngine {
   private canvas: HTMLCanvasElement;

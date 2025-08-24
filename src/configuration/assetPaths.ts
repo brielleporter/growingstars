@@ -5,14 +5,14 @@
 import { AssetPaths } from '../types/gameAssets.types';
 
 export const ASSET_PATHS: AssetPaths = {
-  playerSpriteSheet: '/src/gameAssets/sprites/walk.png',
-  homeBackground: '/src/gameAssets/maps/home.png',
-  barrenBackground: '/src/gameAssets/maps/home_barren.png',
-  seedSprite: '/src/gameAssets/cursedLand/objectsSeparately/rock1Shadow11.png',
+  playerSpriteSheet: '/src/assets/sprites/lwalk.png',
+  homeBackground: '/src/assets/maps/lhome.png',
+  barrenBackground: '/src/assets/maps/home_barren.png',
+  seedSprite: '/src/assets/cursedLand/objectsSeparately/rock1Shadow11.png',
   plantSprites: {
-    eye: '/src/gameAssets/cursedLand/objectsSeparately/eyePlantShadow11.png',
-    tentacle: '/src/gameAssets/cursedLand/objectsSeparately/tentaclePlantShadow11.png',
-    jaws: '/src/gameAssets/cursedLand/objectsSeparately/jawsPlantShadow11.png',
-    spike: '/src/gameAssets/cursedLand/objectsSeparately/spikePlantShadow11.png',
+    eye: '/src/assets/cursedLand/objectsSeparately/eyePlantShadow11.png',
+    tentacle: '/src/assets/cursedLand/objectsSeparately/tentaclePlantShadow11.png',
+    jaws: '/src/assets/cursedLand/objectsSeparately/jawsPlantShadow11.png',
+    spike: '/src/assets/cursedLand/objectsSeparately/spikePlantShadow11.png',
   },
 };
