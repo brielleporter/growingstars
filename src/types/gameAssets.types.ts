@@ -11,6 +11,8 @@ export interface GameAssets {
   homeBackground: HTMLImageElement;
   /** Barren/alien background image */
   barrenBackground: HTMLImageElement;
+  /** Base dirt tile image (48x48) */
+  baseDirtTile: HTMLImageElement;
   /** Seed sprite for unmatured plants */
   seedSprite: HTMLImageElement;
   /** Collection of mature plant sprites by type */
@@ -24,6 +26,8 @@ export interface AssetPaths {
   homeBackground: string;
   /** Path to barren background */
   barrenBackground: string;
+  /** Path to base dirt tile */
+  baseDirtTile: string;
   /** Path to seed sprite */
   seedSprite: string;
   /** Paths to plant sprites by type */

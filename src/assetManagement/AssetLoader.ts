@@ -17,6 +17,7 @@ export class AssetLoader {
       playerSprite: new Image(),
       homeBackground: new Image(),
       barrenBackground: new Image(),
+      baseDirtTile: new Image(),
       seedSprite: new Image(),
       plantSprites: {
         eye: new Image(),
@@ -36,6 +37,7 @@ export class AssetLoader {
     // Load basic assets
     this.loadAsset(this.assets.playerSprite, ASSET_PATHS.playerSpriteSheet);
     this.loadAsset(this.assets.homeBackground, ASSET_PATHS.homeBackground);
+    this.loadAsset(this.assets.baseDirtTile, ASSET_PATHS.baseDirtTile);
     this.loadAsset(this.assets.seedSprite, ASSET_PATHS.seedSprite);
     
     // Load barren background with error handling
@@ -78,7 +80,8 @@ export class AssetLoader {
   }
 
   private calculateTotalAssets(): void {
-    this.totalAssets = 5 + Object.keys(ASSET_PATHS.plantSprites).length; // 5 base assets + plant sprites
+    // base assets: player, home bg, barren bg (handled separately), base dirt tile, seed
+    this.totalAssets = 6 + Object.keys(ASSET_PATHS.plantSprites).length;
   }
 
   private loadAsset(imageElement: HTMLImageElement, assetPath: string): void {
