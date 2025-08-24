@@ -26,6 +26,7 @@
 (() => {
   // ===== Your sheet =====
   const SPRITE_SRC = "assets/sprites/walk.png"; // <-- make sure this file sits next to this HTML
+  const BG_SRC     = "assets/maps/home.png";   // background tilemap image
 
   // Grid (fixed per your sheet)
   const COLS = 9;     // frames per row
@@ -48,6 +49,8 @@
 
   const img = new Image();
   img.src = SPRITE_SRC;
+  const bg = new Image();
+  bg.src = BG_SRC;
 
   const keys = new Set();
   const player = {
@@ -125,6 +128,12 @@
 
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // draw background first (if loaded)
+    if (bg.complete) {
+      // Simple fill to canvas. For pixel-perfect look, consider integer scaling later.
+      ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
+    }
+
     if (!img.complete || !FRAME_W) return;
 
     const sx = player.frame * FRAME_W;
