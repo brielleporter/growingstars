@@ -2,9 +2,9 @@
  * Player character movement and animation system
  */
 
-import { PlayerCharacter, PlayerMovementInput } from '../../types/index';
-import { SPRITE_DIRECTIONS, PLAYER_CONFIG, RENDER_CONFIG, SPRITE_SHEET_CONFIG, CANVAS_CONFIG } from '../../configuration/index';
-import { KeyboardInputManager } from '../inputHandling/index';
+import { PlayerCharacter, PlayerMovementInput } from '../../types/playerCharacter.types';
+import { SPRITE_DIRECTIONS, PLAYER_CONFIG, RENDER_CONFIG, SPRITE_SHEET_CONFIG, CANVAS_CONFIG } from '../../configuration/gameConstants';
+import { KeyboardInputManager } from '../inputHandling/KeyboardInputManager';
 
 export class PlayerMovementSystem {
   private playerCharacter: PlayerCharacter;

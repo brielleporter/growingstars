@@ -2,8 +2,9 @@
  * Asset loading and management system
  */
 
-import { GameAssets, PlantType } from '../types/index';
-import { ASSET_PATHS } from '../configuration/index';
+import { GameAssets } from '../types/gameAssets.types';
+import { PlantType } from '../types/plantSystem.types';
+import { ASSET_PATHS } from '../configuration/assetPaths';
 
 export class AssetLoader {
   private assets: GameAssets;

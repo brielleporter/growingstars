@@ -2,8 +2,9 @@
  * Plant rendering system
  */
 
-import { PlantEntity, GameAssets } from '../../types/index';
-import { RENDER_CONFIG, PLANT_CONFIG } from '../../configuration/index';
+import { PlantEntity } from '../../types/plantSystem.types';
+import { GameAssets } from '../../types/gameAssets.types';
+import { RENDER_CONFIG, PLANT_CONFIG } from '../../configuration/gameConstants';
 
 export class PlantRenderer {
   private renderingContext: CanvasRenderingContext2D;

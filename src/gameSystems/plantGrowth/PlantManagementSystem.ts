@@ -2,9 +2,9 @@
  * Plant growth and management system
  */
 
-import { PlantEntity, PlantType } from '../../types/index';
-import { PLANT_CONFIG } from '../../configuration/index';
-import { ClickPosition } from '../inputHandling/index';
+import { PlantEntity, PlantType } from '../../types/plantSystem.types';
+import { PLANT_CONFIG } from '../../configuration/gameConstants';
+import { ClickPosition } from '../inputHandling/MouseInputManager';
 
 export class PlantManagementSystem {
   private plantedEntities: PlantEntity[] = [];

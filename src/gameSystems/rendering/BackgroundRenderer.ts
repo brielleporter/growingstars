@@ -2,8 +2,8 @@
  * Background rendering system
  */
 
-import { GameAssets } from '../../types/index';
-import { CANVAS_CONFIG } from '../../configuration/index';
+import { GameAssets } from '../../types/gameAssets.types';
+import { CANVAS_CONFIG } from '../../configuration/gameConstants';
 
 export class BackgroundRenderer {
   private renderingContext: CanvasRenderingContext2D;

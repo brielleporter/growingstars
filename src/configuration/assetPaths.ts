@@ -2,7 +2,7 @@
  * Asset path configurations
  */
 
-import { AssetPaths } from '../types/index';
+import { AssetPaths } from '../types/gameAssets.types';
 
 export const ASSET_PATHS: AssetPaths = {
   playerSpriteSheet: '/src/gameAssets/sprites/walk.png',

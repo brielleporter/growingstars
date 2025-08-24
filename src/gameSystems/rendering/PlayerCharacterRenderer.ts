@@ -2,8 +2,9 @@
  * Player character rendering system
  */
 
-import { PlayerCharacter, GameAssets, SpriteConfiguration } from '../../types/index';
-import { RENDER_CONFIG } from '../../configuration/index';
+import { PlayerCharacter } from '../../types/playerCharacter.types';
+import { GameAssets, SpriteConfiguration } from '../../types/gameAssets.types';
+import { RENDER_CONFIG } from '../../configuration/gameConstants';
 
 export class PlayerCharacterRenderer {
   private renderingContext: CanvasRenderingContext2D;

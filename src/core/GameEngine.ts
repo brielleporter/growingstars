@@ -2,18 +2,16 @@
  * Main game engine that orchestrates all game systems
  */
 
-import { GameAssets } from '../types/index';
-import { CANVAS_CONFIG, SPRITE_SHEET_CONFIG } from '../configuration/index';
-import { AssetLoader } from '../assetManagement/index';
-import {
-  KeyboardInputManager,
-  MouseInputManager,
-  PlayerMovementSystem,
-  PlantManagementSystem,
-  BackgroundRenderer,
-  PlantRenderer,
-  PlayerCharacterRenderer
-} from '../gameSystems/index';
+import { GameAssets } from '../types/gameAssets.types';
+import { CANVAS_CONFIG, SPRITE_SHEET_CONFIG } from '../configuration/gameConstants';
+import { AssetLoader } from '../assetManagement/AssetLoader';
+import { KeyboardInputManager } from '../gameSystems/inputHandling/KeyboardInputManager';
+import { MouseInputManager } from '../gameSystems/inputHandling/MouseInputManager';
+import { PlayerMovementSystem } from '../gameSystems/playerCharacter/PlayerMovementSystem';
+import { PlantManagementSystem } from '../gameSystems/plantGrowth/PlantManagementSystem';
+import { BackgroundRenderer } from '../gameSystems/rendering/BackgroundRenderer';
+import { PlantRenderer } from '../gameSystems/rendering/PlantRenderer';
+import { PlayerCharacterRenderer } from '../gameSystems/rendering/PlayerCharacterRenderer';
 
 export class GameEngine {
   private canvas: HTMLCanvasElement;
