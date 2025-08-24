@@ -1,0 +1,20 @@
+{
+  "name": "growing-stars",
+  "version": "1.0.0",
+  "description": "A sprite-based farming game with plant growing mechanics",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "preview": "vite preview",
+    "build-tsc": "tsc",
+    "start": "npm run build && npm run preview"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.0.0",
+    "vite": "^7.1.3"
+  },
+  "author": "",
+  "license": "MIT"
+}

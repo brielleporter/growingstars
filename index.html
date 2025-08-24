@@ -3,207 +3,24 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Sprite Walk Demo (walk.png 9x4)</title>
-  <style>
-    html,body { margin:0; background:#111; color:#eee; font-family:system-ui; }
-    #wrap { display:flex; gap:16px; align-items:flex-start; padding:16px; }
-    canvas { background:#1e1e1e; image-rendering: pixelated; border:1px solid #333; }
-    .panel { max-width:420px; }
-    kbd { background:#222; border:1px solid #444; padding:2px 6px; border-radius:4px; }
-  </style>
+  <title>Growing Stars - Plant Growing Game</title>
+  <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-<div id="wrap">
-  <canvas id="game" width="800" height="560"></canvas>
-  <div class="panel">
+<div id="wrapper">
+  <canvas id="game-canvas" width="800" height="560"></canvas>
+  <div class="control-panel">
     <h2>Controls</h2>
-    <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys to move.</p>
-    <p>Press <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>/<kbd>4</kbd> to force facing (Up/Left/Down/Right) for testing.</p>
+    <div class="instructions">
+      <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move character.</p>
+      <p><kbd>P</kbd> to plant seed at player location.</p>
+      <p><kbd>B</kbd> to toggle background.</p>
+      <p>Seeds grow into plants after 10 seconds.</p>
+      <p><small>Debug: <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>/<kbd>4</kbd> to force facing direction.</small></p>
+    </div>
   </div>
 </div>
 
-<script>
-(() => {
-  // ===== Your sheet =====
-  const SPRITE_SRC = "assets/sprites/walk.png"; // player sprite sheet
-  const BG_SRC     = "assets/maps/home.png";     // original background
-  const BG_BARREN  = "assets/maps/home_barren.png"; // optional barren variant
-
-  // Grid (fixed per your sheet)
-  const COLS = 9;     // frames per row
-  const ROWS = 4;     // total rows (W,A,S,D)
-  // Row mapping (0-based indices)
-  const ROW_UP    = 0; // W
-  const ROW_LEFT  = 1; // A
-  const ROW_DOWN  = 2; // S
-  const ROW_RIGHT = 3; // D
-
-  // Render/anim params
-  const SCALE = 3;     // change to taste
-  const FPS   = 10;    // frames per second
-  const SPEED = 180;   // movement speed (canvas px/sec)
-
-  // ===== Setup =====
-  const canvas = document.getElementById("game");
-  const ctx = canvas.getContext("2d");
-  ctx.imageSmoothingEnabled = false;
-
-  const img = new Image();
-  img.src = SPRITE_SRC;
-
-  // Backgrounds
-  const bgHome = new Image();
-  const bgBarren = new Image();
-  let useBarren = true; // prefer barren if available
-  let barrenAvailable = false;
-  bgHome.src = BG_SRC;
-  bgBarren.src = BG_BARREN;
-  bgBarren.onload = () => { barrenAvailable = true; };
-  bgBarren.onerror = () => { barrenAvailable = false; useBarren = false; };
-
-  const keys = new Set();
-  const player = {
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    row: ROW_DOWN,   // start facing down
-    frame: 0,
-    timer: 0,
-    moving: false
-  };
-
-  // Frame size (computed after image loads)
-  let FRAME_W = 0, FRAME_H = 0;
-
-  addEventListener("keydown", (e) => {
-    const k = e.key.toLowerCase();
-    if (["arrowup","arrowdown","arrowleft","arrowright","w","a","s","d","1","2","3","4"].includes(k)) {
-      keys.add(k);
-      e.preventDefault();
-    }
-    // Force facing test
-    if (k === "1") player.row = ROW_UP;
-    if (k === "2") player.row = ROW_LEFT;
-    if (k === "3") player.row = ROW_DOWN;
-    if (k === "4") player.row = ROW_RIGHT;
-    // Toggle background with 'b'
-    if (k === 'b') {
-      if (barrenAvailable) useBarren = !useBarren; // switch only if barren exists
-      console.log(`Background: ${useBarren ? 'barren' : 'home'}`);
-    }
-  });
-  addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
-
-  function update(dt) {
-    let dx = 0, dy = 0;
-
-    if (keys.has("w") || keys.has("arrowup"))    dy -= 1;
-    if (keys.has("s") || keys.has("arrowdown"))  dy += 1;
-    if (keys.has("a") || keys.has("arrowleft"))  dx -= 1;
-    if (keys.has("d") || keys.has("arrowright")) dx += 1;
-
-    player.moving = (dx !== 0 || dy !== 0);
-
-    // Normalize diagonal
-    if (player.moving && dx && dy) {
-      const inv = 1 / Math.sqrt(2);
-      dx *= inv; dy *= inv;
-    }
-
-    // Choose row based on dominant axis
-    if (Math.abs(dx) > Math.abs(dy)) {
-      player.row = dx > 0 ? ROW_RIGHT : ROW_LEFT;
-    } else if (Math.abs(dy) > 0) {
-      player.row = dy > 0 ? ROW_DOWN  : ROW_UP;
-    }
-
-    // Move
-    player.x += dx * SPEED * dt;
-    player.y += dy * SPEED * dt;
-
-    // Animate
-    const spf = 1 / FPS;
-    if (player.moving) {
-      player.timer += dt;
-      while (player.timer >= spf) {
-        player.frame = (player.frame + 1) % COLS; // 0..8
-        player.timer -= spf;
-      }
-    } else {
-      player.frame = 0;  // idle = first frame of current row
-      player.timer = 0;
-    }
-
-    // Clamp to canvas
-    const dw = FRAME_W * SCALE, dh = FRAME_H * SCALE;
-    const halfW = dw / 2, halfH = dh / 2;
-    player.x = Math.max(halfW, Math.min(canvas.width  - halfW, player.x));
-    player.y = Math.max(halfH, Math.min(canvas.height - halfH, player.y));
-  }
-
-  // Precomputed barren pattern (if barren file missing)
-  let barrenPattern = null;
-  function getBarrenPattern() {
-    if (barrenPattern) return barrenPattern;
-    const off = document.createElement('canvas');
-    off.width = 32; off.height = 32;
-    const ox = off.getContext('2d');
-    ox.imageSmoothingEnabled = false;
-    // simple alien soil: two-tone tiles + speckles
-    ox.fillStyle = '#1a2324'; ox.fillRect(0,0,32,32);
-    ox.fillStyle = '#202c2e'; ox.fillRect(0,0,16,16);
-    ox.fillRect(16,16,16,16);
-    ox.fillStyle = '#233335';
-    for (let i=0;i<24;i++) {
-      const x = (Math.random()*32)|0;
-      const y = (Math.random()*32)|0;
-      ox.fillRect(x,y,1,1);
-    }
-    barrenPattern = ctx.createPattern(off, 'repeat');
-    return barrenPattern;
-  }
-
-  function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // draw background first (image if available, else procedural barren)
-    const bgImg = (useBarren && barrenAvailable) ? bgBarren : bgHome;
-    if (bgImg.complete && bgImg.naturalWidth > 0) {
-      ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
-    } else {
-      // fallback pattern; gives a barren, pathless terrain feel
-      const pat = getBarrenPattern();
-      ctx.save();
-      ctx.fillStyle = pat;
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-      ctx.restore();
-    }
-
-    if (!img.complete || !FRAME_W) return;
-
-    const sx = player.frame * FRAME_W;
-    const sy = player.row   * FRAME_H;
-    const dw = FRAME_W * SCALE;
-    const dh = FRAME_H * SCALE;
-
-    ctx.drawImage(img, sx, sy, FRAME_W, FRAME_H,
-                       Math.round(player.x - dw/2),
-                       Math.round(player.y - dh/2),
-                       dw, dh);
-  }
-
-  let last = performance.now();
-  function loop(now) {
-    const dt = (now - last) / 1000; last = now;
-    update(dt); draw();
-    requestAnimationFrame(loop);
-  }
-
-  img.onload = () => {
-    FRAME_W = Math.floor(img.naturalWidth  / COLS);
-    FRAME_H = Math.floor(img.naturalHeight / ROWS);
-    console.log(`Loaded walk.png: ${img.naturalWidth}x${img.naturalHeight} → frame ${FRAME_W}x${FRAME_H} (grid ${COLS}x${ROWS})`);
-    requestAnimationFrame(loop);
-  };
-})();
-</script>
+<script type="module" src="/src/main.ts"></script>
 </body>
 </html>
