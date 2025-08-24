@@ -3,7 +3,7 @@
  */
 
 import { PlayerCharacter, PlayerMovementInput } from '../../types/playerCharacter.types';
-import { SPRITE_DIRECTIONS, PLAYER_CONFIG, RENDER_CONFIG, SPRITE_SHEET_CONFIG, CANVAS_CONFIG } from '../../configuration/gameConstants';
+import { SPRITE_DIRECTIONS, PLAYER_CONFIG, RENDER_CONFIG, SPRITE_SHEET_CONFIG } from '../../configuration/gameConstants';
 import { KeyboardInputManager } from '../inputHandling/KeyboardInputManager';
 
 export class PlayerMovementSystem {
@@ -11,17 +11,25 @@ export class PlayerMovementSystem {
   private inputManager: KeyboardInputManager;
   private spriteFrameWidth = 0;
   private spriteFrameHeight = 0;
+  private canvasRef: HTMLCanvasElement | null = null;
 
   constructor(inputManager: KeyboardInputManager) {
     this.inputManager = inputManager;
     this.playerCharacter = {
-      xPosition: CANVAS_CONFIG.width / 2,
-      yPosition: CANVAS_CONFIG.height / 2,
+      xPosition: 400, // Default center position
+      yPosition: 300, // Default center position,
       currentRow: SPRITE_DIRECTIONS.down,
       currentFrame: 0,
       animationTimer: 0,
       isMoving: false,
     };
+  }
+
+  public setCanvasReference(canvas: HTMLCanvasElement): void {
+    this.canvasRef = canvas;
+    // Center player when canvas is set
+    this.playerCharacter.xPosition = canvas.width / 2;
+    this.playerCharacter.yPosition = canvas.height / 2;
   }
 
   public initializeSpriteDimensions(spriteWidth: number, spriteHeight: number): void {
@@ -105,20 +113,20 @@ export class PlayerMovementSystem {
   }
 
   private constrainToCanvas(): void {
-    if (this.spriteFrameWidth === 0 || this.spriteFrameHeight === 0) return;
+    if (this.spriteFrameWidth === 0 || this.spriteFrameHeight === 0 || !this.canvasRef) return;
 
-    const displayWidth = this.spriteFrameWidth * RENDER_CONFIG.scale;
-    const displayHeight = this.spriteFrameHeight * RENDER_CONFIG.scale;
+    const displayWidth = this.spriteFrameWidth * RENDER_CONFIG.playerScale;
+    const displayHeight = this.spriteFrameHeight * RENDER_CONFIG.playerScale;
     const halfWidth = displayWidth / 2;
     const halfHeight = displayHeight / 2;
 
     this.playerCharacter.xPosition = Math.max(
       halfWidth, 
-      Math.min(CANVAS_CONFIG.width - halfWidth, this.playerCharacter.xPosition)
+      Math.min(this.canvasRef.width - halfWidth, this.playerCharacter.xPosition)
     );
     this.playerCharacter.yPosition = Math.max(
       halfHeight, 
-      Math.min(CANVAS_CONFIG.height - halfHeight, this.playerCharacter.yPosition)
+      Math.min(this.canvasRef.height - halfHeight, this.playerCharacter.yPosition)
     );
   }
 

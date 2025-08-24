@@ -3,7 +3,8 @@
  */
 
 import { GameAssets } from '../types/gameAssets.types';
-import { CANVAS_CONFIG, SPRITE_SHEET_CONFIG } from '../configuration/gameConstants';
+import { CANVAS_CONFIG, SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS } from '../configuration/gameConstants';
+import { PlayerCharacter } from '../types/playerCharacter.types';
 import { AssetLoader } from '../assetManagement/AssetLoader';
 import { KeyboardInputManager } from '../modules/inputHandling/KeyboardInputManager';
 import { MouseInputManager } from '../modules/inputHandling/MouseInputManager';
@@ -48,18 +49,36 @@ export class GameEngine {
     this.canvas = canvas;
     this.renderingContext = context;
     this.renderingContext.imageSmoothingEnabled = false;
+    
+    // Set up canvas to fill viewport
+    this.setupViewportCanvas();
 
     // Initialize systems
     this.assetLoader = new AssetLoader();
     this.keyboardInput = new KeyboardInputManager();
     this.mouseInput = new MouseInputManager(this.canvas);
     this.playerMovement = new PlayerMovementSystem(this.keyboardInput);
+    this.playerMovement.setCanvasReference(this.canvas);
     this.plantManagement = new PlantManagementSystem();
 
     // Initialize renderers
     this.backgroundRenderer = new BackgroundRenderer(this.renderingContext);
     this.plantRenderer = new PlantRenderer(this.renderingContext);
     this.playerRenderer = new PlayerCharacterRenderer(this.renderingContext);
+  }
+
+  private setupViewportCanvas(): void {
+    const resizeCanvas = () => {
+      this.canvas.width = window.innerWidth;
+      this.canvas.height = window.innerHeight;
+      this.renderingContext.imageSmoothingEnabled = false;
+    };
+    
+    // Set initial size
+    resizeCanvas();
+    
+    // Handle window resize
+    window.addEventListener('resize', resizeCanvas);
   }
 
   public async initialize(): Promise<void> {
@@ -117,10 +136,8 @@ export class GameEngine {
         const currentTime = performance.now();
         if (currentTime - lastPlantTime > PLANT_COOLDOWN) {
           const player = this.playerMovement.getPlayerCharacter();
-          this.plantManagement.handlePlantingClick({
-            x: player.xPosition,
-            y: player.yPosition
-          });
+          const plantingPosition = this.calculatePlantingPosition(player);
+          this.plantManagement.handlePlantingClick(plantingPosition);
           lastPlantTime = currentTime;
         }
       }
@@ -131,6 +148,38 @@ export class GameEngine {
   }
 
   private plantingInputHandler?: () => void;
+
+  private calculatePlantingPosition(player: PlayerCharacter): { x: number; y: number } {
+    const PLANTING_DISTANCE = 40; // Distance in front of player to plant
+    
+    let offsetX = 0;
+    let offsetY = 0;
+    
+    // Calculate offset based on player's facing direction
+    switch (player.currentRow) {
+      case SPRITE_DIRECTIONS.up:
+        offsetY = -PLANTING_DISTANCE;
+        break;
+      case SPRITE_DIRECTIONS.down:
+        offsetY = PLANTING_DISTANCE;
+        break;
+      case SPRITE_DIRECTIONS.left:
+        offsetX = -PLANTING_DISTANCE;
+        break;
+      case SPRITE_DIRECTIONS.right:
+        offsetX = PLANTING_DISTANCE;
+        break;
+      default:
+        // Default to planting in front (down)
+        offsetY = PLANTING_DISTANCE;
+        break;
+    }
+    
+    return {
+      x: player.xPosition + offsetX,
+      y: player.yPosition + offsetY
+    };
+  }
 
   private initializeSpriteDimensions(): void {
     const spriteWidth = this.gameAssets.playerSprite.naturalWidth;
@@ -179,7 +228,7 @@ export class GameEngine {
 
   private renderFrame(): void {
     // Clear canvas
-    this.renderingContext.clearRect(0, 0, CANVAS_CONFIG.width, CANVAS_CONFIG.height);
+    this.renderingContext.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     // Render background
     this.backgroundRenderer.renderBackground(

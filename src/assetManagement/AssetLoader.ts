@@ -17,7 +17,7 @@ export class AssetLoader {
       playerSprite: new Image(),
       homeBackground: new Image(),
       barrenBackground: new Image(),
-      baseDirtTile: new Image(),
+      dirtTile: new Image(),
       seedSprite: new Image(),
       plantSprites: {
         eye: new Image(),
@@ -37,7 +37,7 @@ export class AssetLoader {
     // Load basic assets
     this.loadAsset(this.assets.playerSprite, ASSET_PATHS.playerSpriteSheet);
     this.loadAsset(this.assets.homeBackground, ASSET_PATHS.homeBackground);
-    this.loadAsset(this.assets.baseDirtTile, ASSET_PATHS.baseDirtTile);
+    this.loadAsset(this.assets.dirtTile, ASSET_PATHS.dirtTile);
     this.loadAsset(this.assets.seedSprite, ASSET_PATHS.seedSprite);
     
     // Load barren background with error handling
@@ -80,8 +80,8 @@ export class AssetLoader {
   }
 
   private calculateTotalAssets(): void {
-    // base assets: player, home bg, barren bg (handled separately), base dirt tile, seed
-    this.totalAssets = 6 + Object.keys(ASSET_PATHS.plantSprites).length;
+    // base assets: player, home bg, barren bg (handled separately), dirt tile, seed
+    this.totalAssets = 5 + Object.keys(ASSET_PATHS.plantSprites).length;
   }
 
   private loadAsset(imageElement: HTMLImageElement, assetPath: string): void {
@@ -99,6 +99,14 @@ export class AssetLoader {
   }
 
   private loadBarrenBackground(): void {
+    // If no barren background path is provided, use procedural background
+    if (!ASSET_PATHS.barrenBackground) {
+      this.isBarrenBackgroundAvailable = false;
+      this.loadedCount++;
+      console.log('Using procedural barren background');
+      return;
+    }
+    
     this.assets.barrenBackground.onload = () => {
       this.isBarrenBackgroundAvailable = true;
       this.loadedCount++;
@@ -108,7 +116,7 @@ export class AssetLoader {
     this.assets.barrenBackground.onerror = () => {
       this.isBarrenBackgroundAvailable = false;
       this.loadedCount++;
-      console.log('Barren background not available, using fallback pattern');
+      console.log('Barren background not available, using procedural pattern');
     };
     
     this.assets.barrenBackground.src = ASSET_PATHS.barrenBackground;

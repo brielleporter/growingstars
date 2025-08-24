@@ -30,8 +30,8 @@ export class PlayerCharacterRenderer {
 
     const sourceX = player.currentFrame * this.spriteConfig.frameWidth;
     const sourceY = player.currentRow * this.spriteConfig.frameHeight;
-    const displayWidth = this.spriteConfig.frameWidth * RENDER_CONFIG.scale;
-    const displayHeight = this.spriteConfig.frameHeight * RENDER_CONFIG.scale;
+    const displayWidth = this.spriteConfig.frameWidth * RENDER_CONFIG.playerScale;
+    const displayHeight = this.spriteConfig.frameHeight * RENDER_CONFIG.playerScale;
 
     this.renderingContext.drawImage(
       assets.playerSprite,

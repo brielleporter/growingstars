@@ -3,13 +3,12 @@
  */
 
 import { GameAssets } from '../../types/gameAssets.types';
-import { CANVAS_CONFIG } from '../../configuration/gameConstants';
 
 export class BackgroundRenderer {
   private renderingContext: CanvasRenderingContext2D;
   private useBarrenBackground = true;
   private cachedBarrenPattern: CanvasPattern | null = null;
-  private cachedBaseDirtPattern: CanvasPattern | null = null;
+  private cachedDirtPattern: CanvasPattern | null = null;
 
   constructor(renderingContext: CanvasRenderingContext2D) {
     this.renderingContext = renderingContext;
@@ -24,13 +23,13 @@ export class BackgroundRenderer {
   }
 
   public renderBackground(assets: GameAssets, isBarrenAvailable: boolean): void {
-    // 1) Prefer base dirt tile if available
-    if (assets.baseDirtTile.complete && assets.baseDirtTile.naturalWidth > 0) {
-      this.renderBaseDirtBackground(assets.baseDirtTile);
+    // 1) Prefer dirt tile as base terrain
+    if (assets.dirtTile.complete && assets.dirtTile.naturalWidth > 0) {
+      this.renderDirtTileBackground(assets.dirtTile);
       return;
     }
 
-    // 2) Legacy images (barren/home)
+    // 2) Fallback to legacy backgrounds
     const backgroundImage = (this.useBarrenBackground && isBarrenAvailable)
       ? assets.barrenBackground
       : assets.homeBackground;
@@ -38,44 +37,48 @@ export class BackgroundRenderer {
     if (backgroundImage.complete && backgroundImage.naturalWidth > 0) {
       this.renderBackgroundImage(backgroundImage);
     } else {
-      // 3) Procedural fallback
+      // 3) Final fallback to procedural background
       this.renderProceduralBarrenBackground();
     }
   }
 
   private renderBackgroundImage(backgroundImage: HTMLImageElement): void {
+    const canvas = this.renderingContext.canvas;
     this.renderingContext.drawImage(
       backgroundImage,
       0, 0,
-      CANVAS_CONFIG.width,
-      CANVAS_CONFIG.height
+      canvas.width,
+      canvas.height
     );
   }
 
   private renderProceduralBarrenBackground(): void {
     const barrenPattern = this.generateBarrenPattern();
     if (barrenPattern) {
+      const canvas = this.renderingContext.canvas;
       this.renderingContext.save();
       this.renderingContext.fillStyle = barrenPattern;
-      this.renderingContext.fillRect(0, 0, CANVAS_CONFIG.width, CANVAS_CONFIG.height);
+      this.renderingContext.fillRect(0, 0, canvas.width, canvas.height);
       this.renderingContext.restore();
     }
   }
 
-  private renderBaseDirtBackground(dirtTile: HTMLImageElement): void {
-    const pattern = this.generateBaseDirtPattern(dirtTile);
+  private renderDirtTileBackground(dirtTile: HTMLImageElement): void {
+    const pattern = this.generateDirtPattern(dirtTile);
     if (pattern) {
+      const canvas = this.renderingContext.canvas;
       this.renderingContext.save();
       this.renderingContext.fillStyle = pattern;
-      this.renderingContext.fillRect(0, 0, CANVAS_CONFIG.width, CANVAS_CONFIG.height);
+      this.renderingContext.fillRect(0, 0, canvas.width, canvas.height);
       this.renderingContext.restore();
     }
   }
 
-  private generateBaseDirtPattern(dirtTile: HTMLImageElement): CanvasPattern | null {
-    if (this.cachedBaseDirtPattern) return this.cachedBaseDirtPattern;
-    this.cachedBaseDirtPattern = this.renderingContext.createPattern(dirtTile, 'repeat');
-    return this.cachedBaseDirtPattern;
+
+  private generateDirtPattern(dirtTile: HTMLImageElement): CanvasPattern | null {
+    if (this.cachedDirtPattern) return this.cachedDirtPattern;
+    this.cachedDirtPattern = this.renderingContext.createPattern(dirtTile, 'repeat');
+    return this.cachedDirtPattern;
   }
 
   private generateBarrenPattern(): CanvasPattern | null {

@@ -35,7 +35,7 @@ export class PlantRenderer {
     const plantSprite = assets.plantSprites[plant.plantType];
     
     if (plantSprite.complete && plantSprite.naturalWidth > 0) {
-      this.renderPlantSprite(plantSprite, plant.xPosition, plant.yPosition, RENDER_CONFIG.scale);
+      this.renderPlantSprite(plantSprite, plant.xPosition, plant.yPosition, RENDER_CONFIG.plantScale);
     } else {
       this.renderFallbackMaturePlant(plant.xPosition, plant.yPosition);
     }
@@ -43,7 +43,7 @@ export class PlantRenderer {
 
   private renderSeedPlant(plant: PlantEntity, assets: GameAssets): void {
     if (assets.seedSprite.complete && assets.seedSprite.naturalWidth > 0) {
-      const seedScale = RENDER_CONFIG.scale * PLANT_CONFIG.seedScaleFactor;
+      const seedScale = RENDER_CONFIG.plantScale * PLANT_CONFIG.seedScaleFactor;
       this.renderPlantSprite(assets.seedSprite, plant.xPosition, plant.yPosition, seedScale);
     } else {
       this.renderFallbackSeed(plant.xPosition, plant.yPosition);
@@ -71,24 +71,26 @@ export class PlantRenderer {
   }
 
   private renderFallbackMaturePlant(xPosition: number, yPosition: number): void {
-    // Fallback: green rectangle for grown plant
+    // Fallback: green rectangle for grown plant (scaled down)
+    const scaledSize = PLANT_CONFIG.size * RENDER_CONFIG.plantScale;
     this.renderingContext.fillStyle = '#228B22';
     this.renderingContext.fillRect(
-      xPosition - PLANT_CONFIG.size,
-      yPosition - PLANT_CONFIG.size * 2,
-      PLANT_CONFIG.size * 2,
-      PLANT_CONFIG.size * 2
+      xPosition - scaledSize,
+      yPosition - scaledSize * 2,
+      scaledSize * 2,
+      scaledSize * 2
     );
   }
 
   private renderFallbackSeed(xPosition: number, yPosition: number): void {
-    // Fallback: brown square for seed
+    // Fallback: brown square for seed (scaled down)
+    const scaledSeedSize = 4 * RENDER_CONFIG.plantScale * PLANT_CONFIG.seedScaleFactor;
     this.renderingContext.fillStyle = '#8B4513';
     this.renderingContext.fillRect(
-      xPosition - 4, 
-      yPosition - 4, 
-      8, 
-      8
+      xPosition - scaledSeedSize, 
+      yPosition - scaledSeedSize, 
+      scaledSeedSize * 2, 
+      scaledSeedSize * 2
     );
   }
 }
