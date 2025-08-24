@@ -25,8 +25,9 @@
 <script>
 (() => {
   // ===== Your sheet =====
-  const SPRITE_SRC = "assets/sprites/walk.png"; // <-- make sure this file sits next to this HTML
-  const BG_SRC     = "assets/maps/home.png";   // background tilemap image
+  const SPRITE_SRC = "assets/sprites/walk.png"; // player sprite sheet
+  const BG_SRC     = "assets/maps/home.png";     // original background
+  const BG_BARREN  = "assets/maps/home_barren.png"; // optional barren variant
 
   // Grid (fixed per your sheet)
   const COLS = 9;     // frames per row
@@ -49,8 +50,16 @@
 
   const img = new Image();
   img.src = SPRITE_SRC;
-  const bg = new Image();
-  bg.src = BG_SRC;
+
+  // Backgrounds
+  const bgHome = new Image();
+  const bgBarren = new Image();
+  let useBarren = true; // prefer barren if available
+  let barrenAvailable = false;
+  bgHome.src = BG_SRC;
+  bgBarren.src = BG_BARREN;
+  bgBarren.onload = () => { barrenAvailable = true; };
+  bgBarren.onerror = () => { barrenAvailable = false; useBarren = false; };
 
   const keys = new Set();
   const player = {
@@ -76,6 +85,11 @@
     if (k === "2") player.row = ROW_LEFT;
     if (k === "3") player.row = ROW_DOWN;
     if (k === "4") player.row = ROW_RIGHT;
+    // Toggle background with 'b'
+    if (k === 'b') {
+      if (barrenAvailable) useBarren = !useBarren; // switch only if barren exists
+      console.log(`Background: ${useBarren ? 'barren' : 'home'}`);
+    }
   });
   addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 
@@ -126,12 +140,41 @@
     player.y = Math.max(halfH, Math.min(canvas.height - halfH, player.y));
   }
 
+  // Precomputed barren pattern (if barren file missing)
+  let barrenPattern = null;
+  function getBarrenPattern() {
+    if (barrenPattern) return barrenPattern;
+    const off = document.createElement('canvas');
+    off.width = 32; off.height = 32;
+    const ox = off.getContext('2d');
+    ox.imageSmoothingEnabled = false;
+    // simple alien soil: two-tone tiles + speckles
+    ox.fillStyle = '#1a2324'; ox.fillRect(0,0,32,32);
+    ox.fillStyle = '#202c2e'; ox.fillRect(0,0,16,16);
+    ox.fillRect(16,16,16,16);
+    ox.fillStyle = '#233335';
+    for (let i=0;i<24;i++) {
+      const x = (Math.random()*32)|0;
+      const y = (Math.random()*32)|0;
+      ox.fillRect(x,y,1,1);
+    }
+    barrenPattern = ctx.createPattern(off, 'repeat');
+    return barrenPattern;
+  }
+
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // draw background first (if loaded)
-    if (bg.complete) {
-      // Simple fill to canvas. For pixel-perfect look, consider integer scaling later.
-      ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
+    // draw background first (image if available, else procedural barren)
+    const bgImg = (useBarren && barrenAvailable) ? bgBarren : bgHome;
+    if (bgImg.complete && bgImg.naturalWidth > 0) {
+      ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+    } else {
+      // fallback pattern; gives a barren, pathless terrain feel
+      const pat = getBarrenPattern();
+      ctx.save();
+      ctx.fillStyle = pat;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.restore();
     }
 
     if (!img.complete || !FRAME_W) return;
