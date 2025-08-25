@@ -15,5 +15,6 @@ export const ASSET_PATHS: AssetPaths = {
     jaws: '/src/assets/cursedLand/objectsSeparately/jawPlantShadow11.png',
     spike: '/src/assets/cursedLand/objectsSeparately/spikePlantShadow11.png',
     orb: '/src/assets/plants/plant-orb.png',
+    mushroom: '/src/assets/plants/plantMushroom.png',
   },
 };

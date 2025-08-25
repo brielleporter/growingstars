@@ -22,8 +22,8 @@ export class PlantRenderer {
   private renderSinglePlant(plant: PlantEntity, assets: GameAssets): void {
     this.renderingContext.save();
     
-    if (plant.plantType === 'orb') {
-      this.renderOrbPlant(plant, assets);
+    if (plant.plantType === 'orb' || plant.plantType === 'mushroom') {
+      this.renderFourStageHorizontalPlant(plant, assets.plantSprites[plant.plantType]);
     } else {
       if (plant.hasGrown) {
         this.renderMaturePlant(plant, assets);
@@ -36,11 +36,10 @@ export class PlantRenderer {
   }
 
   /**
-   * Render the 4-stage orb plant from a single horizontal spritesheet (4 columns x 1 row):
-   * seedling, sprout, budding, harvest. Before grown, show stages 0..2. After grown, show stage 3.
+   * Render a 4-stage plant from a single horizontal spritesheet (4 columns × 1 row):
+   * seedling, sprout, budding, harvest. Before grown, show 0..2; after grown, show 3.
    */
-  private renderOrbPlant(plant: PlantEntity, assets: GameAssets): void {
-    const img = assets.plantSprites['orb'];
+  private renderFourStageHorizontalPlant(plant: PlantEntity, img: HTMLImageElement | undefined): void {
     if (!img || !img.complete || img.naturalWidth === 0) {
       // Fallback simple circle when image not yet available
       const r = 6 * RENDER_CONFIG.plantScale;

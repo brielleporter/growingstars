@@ -8,7 +8,7 @@ import { ClickPosition } from '../inputHandling/MouseInputManager';
 
 export class PlantManagementSystem {
   private plantedEntities: PlantEntity[] = [];
-  private readonly availablePlantTypes: PlantType[] = ['eye', 'tentacle', 'jaws', 'spike', 'orb'];
+  private readonly availablePlantTypes: PlantType[] = ['eye', 'tentacle', 'jaws', 'spike', 'orb', 'mushroom'];
 
   public getPlantedEntities(): PlantEntity[] {
     return this.plantedEntities;
