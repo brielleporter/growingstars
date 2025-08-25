@@ -2,7 +2,7 @@
  * Type definitions for the plant growing system
  */
 
-export type PlantType = 'eye' | 'tentacle' | 'jaws' | 'spike';
+export type PlantType = 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb';
 
 export interface PlantEntity {
   /** X position where the plant was planted */

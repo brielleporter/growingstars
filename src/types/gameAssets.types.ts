@@ -9,6 +9,8 @@ export interface GameAssets {
   playerSprite: HTMLImageElement;
   /** Home background image */
   homeBackground: HTMLImageElement;
+  /** Barren/alien background image (optional, may be empty path) */
+  barrenBackground: HTMLImageElement;
   /** Base terrain tile (dirt) */
   dirtTile: HTMLImageElement;
   /** Seed sprite for unmatured plants */
@@ -22,6 +24,8 @@ export interface AssetPaths {
   playerSpriteSheet: string;
   /** Path to home background */
   homeBackground: string;
+  /** Path to barren background (can be empty to use procedural) */
+  barrenBackground: string;
   /** Path to dirt terrain tile */
   dirtTile: string;
   /** Path to seed sprite */

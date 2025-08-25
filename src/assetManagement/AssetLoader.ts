@@ -24,6 +24,7 @@ export class AssetLoader {
         tentacle: new Image(),
         jaws: new Image(),
         spike: new Image(),
+        orb: new Image(),
       },
     };
   }

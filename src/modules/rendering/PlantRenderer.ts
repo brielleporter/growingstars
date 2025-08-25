@@ -22,13 +22,58 @@ export class PlantRenderer {
   private renderSinglePlant(plant: PlantEntity, assets: GameAssets): void {
     this.renderingContext.save();
     
-    if (plant.hasGrown) {
-      this.renderMaturePlant(plant, assets);
+    if (plant.plantType === 'orb') {
+      this.renderOrbPlant(plant, assets);
     } else {
-      this.renderSeedPlant(plant, assets);
+      if (plant.hasGrown) {
+        this.renderMaturePlant(plant, assets);
+      } else {
+        this.renderSeedPlant(plant, assets);
+      }
     }
     
     this.renderingContext.restore();
+  }
+
+  /**
+   * Render the 4-stage orb plant from a single horizontal spritesheet (4 columns x 1 row):
+   * seedling, sprout, budding, harvest. Before grown, show stages 0..2. After grown, show stage 3.
+   */
+  private renderOrbPlant(plant: PlantEntity, assets: GameAssets): void {
+    const img = assets.plantSprites['orb'];
+    if (!img || !img.complete || img.naturalWidth === 0) {
+      // Fallback simple circle when image not yet available
+      const r = 6 * RENDER_CONFIG.plantScale;
+      this.renderingContext.fillStyle = '#62d0ff';
+      this.renderingContext.beginPath();
+      this.renderingContext.arc(plant.xPosition, plant.yPosition - r / 2, r, 0, Math.PI * 2);
+      this.renderingContext.fill();
+      return;
+    }
+
+    const cols = 4;
+    const frameW = Math.floor(img.naturalWidth / cols);
+    const frameH = img.naturalHeight;
+
+    const elapsed = (performance.now() - plant.plantingTime) / 1000;
+    const total = Math.max(0.001, PLANT_CONFIG.growthDurationSeconds);
+    let idx = Math.floor((elapsed / total) * cols); // 0..4
+    if (!plant.hasGrown) idx = Math.min(idx, 2); // clamp to 0..2 until grown
+    idx = Math.max(0, Math.min(3, idx)); // final clamp 0..3
+
+    const sx = idx * frameW;
+    const sy = 0;
+    const scale = RENDER_CONFIG.plantScale;
+    const dw = frameW * scale;
+    const dh = frameH * scale;
+
+    this.renderingContext.drawImage(
+      img,
+      sx, sy, frameW, frameH,
+      plant.xPosition - dw / 2,
+      plant.yPosition - dh / 2,
+      dw, dh
+    );
   }
 
   private renderMaturePlant(plant: PlantEntity, assets: GameAssets): void {

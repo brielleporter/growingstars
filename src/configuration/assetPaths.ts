@@ -14,5 +14,6 @@ export const ASSET_PATHS: AssetPaths = {
     tentacle: '/src/assets/cursedLand/objectsSeparately/tentacePlantShadow11.png',
     jaws: '/src/assets/cursedLand/objectsSeparately/jawPlantShadow11.png',
     spike: '/src/assets/cursedLand/objectsSeparately/spikePlantShadow11.png',
+    orb: '/src/assets/plants/plant-orb.png',
   },
 };
