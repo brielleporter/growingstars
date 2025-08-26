@@ -3,6 +3,7 @@
  */
 
 import { GameAssets } from '../../types/gameAssets.types';
+import { TILE_CONFIG } from '../../configuration/gameConstants';
 
 export class BackgroundRenderer {
   private renderingContext: CanvasRenderingContext2D;
@@ -85,8 +86,9 @@ export class BackgroundRenderer {
     if (this.cachedBarrenPattern) return this.cachedBarrenPattern;
 
     const patternCanvas = document.createElement('canvas');
-    patternCanvas.width = 32;
-    patternCanvas.height = 32;
+    const tile = TILE_CONFIG.tileSize;
+    patternCanvas.width = tile;
+    patternCanvas.height = tile;
     const patternContext = patternCanvas.getContext('2d');
 
     if (!patternContext) return null;
@@ -95,16 +97,17 @@ export class BackgroundRenderer {
 
     // Create alien soil pattern
     patternContext.fillStyle = '#1a2324';
-    patternContext.fillRect(0, 0, 32, 32);
+    patternContext.fillRect(0, 0, tile, tile);
 
     patternContext.fillStyle = '#202c2e';
-    patternContext.fillRect(0, 0, 16, 16);
-    patternContext.fillRect(16, 16, 16, 16);
+    const half = Math.floor(tile / 2);
+    patternContext.fillRect(0, 0, half, half);
+    patternContext.fillRect(half, half, half, half);
 
     patternContext.fillStyle = '#233335';
     for (let speckleIndex = 0; speckleIndex < 24; speckleIndex++) {
-      const speckleX = Math.floor(Math.random() * 32);
-      const speckleY = Math.floor(Math.random() * 32);
+      const speckleX = Math.floor(Math.random() * tile);
+      const speckleY = Math.floor(Math.random() * tile);
       patternContext.fillRect(speckleX, speckleY, 1, 1);
     }
 

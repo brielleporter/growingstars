@@ -31,6 +31,28 @@ export const RENDER_CONFIG = {
   framesPerSecond: 10,
 } as const;
 
+// Tile configuration
+export const TILE_CONFIG = {
+  /** Base square tile size in pixels */
+  tileSize: 32,
+} as const;
+
+// World configuration (in tiles)
+export const WORLD_CONFIG = {
+  /** World width in tiles */
+  widthTiles: 100,
+  /** World height in tiles */
+  heightTiles: 100,
+} as const;
+
+// Derived world size (in pixels)
+export const WORLD_PIXEL_SIZE = {
+  /** World width in pixels */
+  width: TILE_CONFIG.tileSize * WORLD_CONFIG.widthTiles,
+  /** World height in pixels */
+  height: TILE_CONFIG.tileSize * WORLD_CONFIG.heightTiles,
+} as const;
+
 // Player movement configuration
 export const PLAYER_CONFIG = {
   /** Movement speed in pixels per second */

@@ -3,7 +3,7 @@
  */
 
 import { PlayerCharacter, PlayerMovementInput } from '../../types/playerCharacter.types';
-import { SPRITE_DIRECTIONS, PLAYER_CONFIG, RENDER_CONFIG, SPRITE_SHEET_CONFIG } from '../../configuration/gameConstants';
+import { SPRITE_DIRECTIONS, PLAYER_CONFIG, RENDER_CONFIG, SPRITE_SHEET_CONFIG, WORLD_PIXEL_SIZE } from '../../configuration/gameConstants';
 import { KeyboardInputManager } from '../inputHandling/KeyboardInputManager';
 
 export class PlayerMovementSystem {
@@ -134,14 +134,14 @@ export class PlayerMovementSystem {
     const halfWidth = displayWidth / 2;
     const halfHeight = displayHeight / 2;
 
-    this.playerCharacter.xPosition = Math.max(
-      halfWidth, 
-      Math.min(this.canvasRef.width - halfWidth, this.playerCharacter.xPosition)
-    );
-    this.playerCharacter.yPosition = Math.max(
-      halfHeight, 
-      Math.min(this.canvasRef.height - halfHeight, this.playerCharacter.yPosition)
-    );
+    // Effective bounds: intersection of canvas and world (pre-camera)
+    const maxX = Math.min(this.canvasRef.width, WORLD_PIXEL_SIZE.width) - halfWidth;
+    const maxY = Math.min(this.canvasRef.height, WORLD_PIXEL_SIZE.height) - halfHeight;
+    const minX = halfWidth;
+    const minY = halfHeight;
+
+    this.playerCharacter.xPosition = Math.max(minX, Math.min(maxX, this.playerCharacter.xPosition));
+    this.playerCharacter.yPosition = Math.max(minY, Math.min(maxY, this.playerCharacter.yPosition));
   }
 
   private resolveCollisions(dx: number, dy: number): void {

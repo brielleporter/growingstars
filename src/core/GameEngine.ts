@@ -3,7 +3,7 @@
  */
 
 import { GameAssets } from '../types/gameAssets.types';
-import { CANVAS_CONFIG, SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG } from '../configuration/gameConstants';
+import { SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG } from '../configuration/gameConstants';
 import { PlayerCharacter } from '../types/playerCharacter.types';
 import { AssetLoader } from '../assetManagement/AssetLoader';
 import { KeyboardInputManager } from '../modules/inputHandling/KeyboardInputManager';
