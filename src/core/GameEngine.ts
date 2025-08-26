@@ -3,7 +3,7 @@
  */
 
 import { GameAssets } from '../types/gameAssets.types';
-import { CANVAS_CONFIG, SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS } from '../configuration/gameConstants';
+import { CANVAS_CONFIG, SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG } from '../configuration/gameConstants';
 import { PlayerCharacter } from '../types/playerCharacter.types';
 import { AssetLoader } from '../assetManagement/AssetLoader';
 import { KeyboardInputManager } from '../modules/inputHandling/KeyboardInputManager';
@@ -11,6 +11,7 @@ import { MouseInputManager } from '../modules/inputHandling/MouseInputManager';
 import { PlayerMovementSystem } from '../modules/playerCharacter/PlayerMovementSystem';
 import { PlantManagementSystem } from '../modules/plantGrowth/PlantManagementSystem';
 import { BackgroundRenderer } from '../modules/rendering/BackgroundRenderer';
+import { BuildingRenderer } from '../modules/rendering/BuildingRenderer';
 import { PlantRenderer } from '../modules/rendering/PlantRenderer';
 import { PlayerCharacterRenderer } from '../modules/rendering/PlayerCharacterRenderer';
 
@@ -27,6 +28,7 @@ export class GameEngine {
 
   // Renderers
   private backgroundRenderer: BackgroundRenderer;
+  private buildingRenderer: BuildingRenderer;
   private plantRenderer: PlantRenderer;
   private playerRenderer: PlayerCharacterRenderer;
 
@@ -63,6 +65,7 @@ export class GameEngine {
 
     // Initialize renderers
     this.backgroundRenderer = new BackgroundRenderer(this.renderingContext);
+    this.buildingRenderer = new BuildingRenderer(this.renderingContext);
     this.plantRenderer = new PlantRenderer(this.renderingContext);
     this.playerRenderer = new PlayerCharacterRenderer(this.renderingContext);
   }
@@ -221,9 +224,34 @@ export class GameEngine {
       this.plantingInputHandler();
     }
 
+
+    // Update collisions (house base as a blocking rect)
+    this.updateWorldCollisions();
+
     // Update game systems
     this.playerMovement.updatePlayerMovement(deltaTimeSeconds);
     this.plantManagement.updatePlantGrowth();
+  }
+
+  private updateWorldCollisions(): void {
+    const base = this.gameAssets.buildings?.playerHouseBase;
+    if (!base || !base.complete || base.naturalWidth === 0) {
+      this.playerMovement.setCollisionRects([]);
+      return;
+    }
+    const canvas = this.renderingContext.canvas;
+    const dw = base.naturalWidth;
+    const dh = base.naturalHeight;
+    const centerX = Math.floor(canvas.width / 2);
+    const centerY = Math.floor(canvas.height / 2);
+    const dx = centerX - Math.floor(dw / 2);
+    const dy = centerY - dh;
+    // Tight collision crop (222x100 at 1x), anchored to bottom-center
+    const cropW = RENDER_CONFIG.playerHouseCollisionSize.width;
+    const cropH = RENDER_CONFIG.playerHouseCollisionSize.height;
+    const cx = Math.floor((dx + dw / 2) - cropW / 2);
+    const cy = Math.floor(dy + dh - cropH);
+    this.playerMovement.setCollisionRects([{ x: cx, y: cy, w: cropW, h: cropH }]);
   }
 
   private renderFrame(): void {
@@ -236,6 +264,9 @@ export class GameEngine {
       this.assetLoader.isBarrenAvailable()
     );
 
+    // Render building bases (below player)
+    this.buildingRenderer.renderBuildingBases(this.gameAssets);
+
     // Render plants
     this.plantRenderer.renderAllPlants(
       this.plantManagement.getPlantedEntities(),
@@ -247,7 +278,12 @@ export class GameEngine {
       this.playerMovement.getPlayerCharacter(),
       this.gameAssets
     );
+
+    // Render building roofs (above player)
+    this.buildingRenderer.renderBuildingRoofs(this.gameAssets);
   }
+
+  // Collision debug overlay removed per request
 
   // Utility methods for debugging
   public getGameStats(): any {

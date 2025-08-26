@@ -27,6 +27,10 @@ export class AssetLoader {
         orb: new Image(),
         mushroom: new Image(),
       },
+      buildings: {
+        playerHouseBase: new Image(),
+        playerHouseRoof: new Image(),
+      },
     };
   }
 
@@ -49,6 +53,10 @@ export class AssetLoader {
     Object.entries(ASSET_PATHS.plantSprites).forEach(([plantType, path]) => {
       this.loadAsset(this.assets.plantSprites[plantType as PlantType], path);
     });
+
+    // Load buildings
+    this.loadAsset(this.assets.buildings.playerHouseBase, ASSET_PATHS.buildings.playerHouseBase);
+    this.loadAsset(this.assets.buildings.playerHouseRoof, ASSET_PATHS.buildings.playerHouseRoof);
 
     return this.assets;
   }
@@ -82,8 +90,11 @@ export class AssetLoader {
   }
 
   private calculateTotalAssets(): void {
-    // base assets: player, home bg, barren bg (handled separately), dirt tile, seed
-    this.totalAssets = 5 + Object.keys(ASSET_PATHS.plantSprites).length;
+    // Count: player, home, dirt, seed, barren (handled in its loader), plants, buildings
+    const baseCount = 5; // player, home, dirt, seed, barren
+    const plantCount = Object.keys(ASSET_PATHS.plantSprites).length;
+    const buildingCount = Object.keys(ASSET_PATHS.buildings).length;
+    this.totalAssets = baseCount + plantCount + buildingCount;
   }
 
   private loadAsset(imageElement: HTMLImageElement, assetPath: string): void {

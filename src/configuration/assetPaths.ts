@@ -17,4 +17,8 @@ export const ASSET_PATHS: AssetPaths = {
     orb: '/src/assets/plants/plant-orb.png',
     mushroom: '/src/assets/plants/plantMushroom.png',
   },
+  buildings: {
+    playerHouseBase: '/src/assets/buildings/playerHouseBase.png',
+    playerHouseRoof: '/src/assets/buildings/playerHouseRoof.png',
+  },
 };

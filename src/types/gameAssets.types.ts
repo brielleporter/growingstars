@@ -17,6 +17,11 @@ export interface GameAssets {
   seedSprite: HTMLImageElement;
   /** Collection of mature plant sprites by type */
   plantSprites: Record<PlantType, HTMLImageElement>;
+  /** Building sprites (e.g., player house, shops) */
+  buildings: {
+    playerHouseBase: HTMLImageElement;
+    playerHouseRoof: HTMLImageElement;
+  };
 }
 
 export interface AssetPaths {
@@ -32,6 +37,11 @@ export interface AssetPaths {
   seedSprite: string;
   /** Paths to plant sprites by type */
   plantSprites: Record<PlantType, string>;
+  /** Paths to building sprites */
+  buildings: {
+    playerHouseBase: string;
+    playerHouseRoof: string;
+  };
 }
 
 export interface SpriteConfiguration {

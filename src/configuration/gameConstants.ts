@@ -22,6 +22,11 @@ export const RENDER_CONFIG = {
   playerScale: 1.5, // 2x larger than current (0.75 * 2 = 1.5)
   /** Scale factor for plant sprites */
   plantScale: 1.5, // 4x larger than current (0.375 * 4 = 1.5) 
+  /** Optional tight crop for the player house base collision (source pixels, before scaling). */
+  playerHouseCollisionSize: {
+    width: 222,
+    height: 100,
+  },
   /** Animation frames per second */
   framesPerSecond: 10,
 } as const;

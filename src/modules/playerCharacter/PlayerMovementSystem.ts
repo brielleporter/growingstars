@@ -12,6 +12,7 @@ export class PlayerMovementSystem {
   private spriteFrameWidth = 0;
   private spriteFrameHeight = 0;
   private canvasRef: HTMLCanvasElement | null = null;
+  private collisionRects: Array<{ x: number; y: number; w: number; h: number }> = [];
 
   constructor(inputManager: KeyboardInputManager) {
     this.inputManager = inputManager;
@@ -40,6 +41,13 @@ export class PlayerMovementSystem {
   public getPlayerCharacter(): PlayerCharacter {
     return this.playerCharacter;
   }
+
+  /** Replace the current list of world collision rectangles (screen-space). */
+  public setCollisionRects(rects: Array<{ x: number; y: number; w: number; h: number }>): void {
+    this.collisionRects = rects || [];
+  }
+
+  // Collision debug accessor removed per request
 
   public updatePlayerMovement(deltaTimeSeconds: number): void {
     const movementInput = this.calculateMovementInput();
@@ -93,8 +101,14 @@ export class PlayerMovementSystem {
     }
 
     // Apply movement
-    this.playerCharacter.xPosition += movementInput.horizontalMovement * PLAYER_CONFIG.movementSpeed * deltaTimeSeconds;
-    this.playerCharacter.yPosition += movementInput.verticalMovement * PLAYER_CONFIG.movementSpeed * deltaTimeSeconds;
+    const dx = movementInput.horizontalMovement * PLAYER_CONFIG.movementSpeed * deltaTimeSeconds;
+    const dy = movementInput.verticalMovement * PLAYER_CONFIG.movementSpeed * deltaTimeSeconds;
+
+    this.playerCharacter.xPosition += dx;
+    this.playerCharacter.yPosition += dy;
+
+    // Resolve collisions against world rectangles
+    this.resolveCollisions(dx, dy);
   }
 
   private updateAnimation(movementInput: PlayerMovementInput, deltaTimeSeconds: number): void {
@@ -128,6 +142,68 @@ export class PlayerMovementSystem {
       halfHeight, 
       Math.min(this.canvasRef.height - halfHeight, this.playerCharacter.yPosition)
     );
+  }
+
+  private resolveCollisions(dx: number, dy: number): void {
+    if (this.spriteFrameWidth === 0 || this.spriteFrameHeight === 0) return;
+
+    const displayWidth = this.spriteFrameWidth * RENDER_CONFIG.playerScale;
+    const displayHeight = this.spriteFrameHeight * RENDER_CONFIG.playerScale;
+    const halfW = displayWidth / 2;
+    const halfH = displayHeight / 2;
+
+    // Player AABB
+    let px = this.playerCharacter.xPosition - halfW;
+    let py = this.playerCharacter.yPosition - halfH;
+    const pw = displayWidth;
+    const ph = displayHeight;
+
+    for (const r of this.collisionRects) {
+      if (px < r.x + r.w && px + pw > r.x && py < r.y + r.h && py + ph > r.y) {
+        // Compute overlap on each axis
+        const overlapX1 = (r.x + r.w) - px;      // push right
+        const overlapX2 = (px + pw) - r.x;       // push left
+        const overlapY1 = (r.y + r.h) - py;      // push down
+        const overlapY2 = (py + ph) - r.y;       // push up
+
+        // Choose smallest penetration vector, favoring separating along movement axis
+        const penLeft = overlapX2;
+        const penRight = overlapX1;
+        const penUp = overlapY2;
+        const penDown = overlapY1;
+
+        // Decide axis: prefer the axis of greater movement magnitude
+        const preferX = Math.abs(dx) >= Math.abs(dy);
+
+        if (preferX) {
+          if (dx > 0) {
+            // moving right, push left
+            this.playerCharacter.xPosition -= penLeft;
+          } else if (dx < 0) {
+            // moving left, push right
+            this.playerCharacter.xPosition += penRight;
+          } else {
+            // no x movement: pick smallest
+            if (penLeft < penRight) this.playerCharacter.xPosition -= penLeft; else this.playerCharacter.xPosition += penRight;
+          }
+        } else {
+          if (dy > 0) {
+            // moving down, push up
+            this.playerCharacter.yPosition -= penUp;
+          } else if (dy < 0) {
+            // moving up, push down
+            this.playerCharacter.yPosition += penDown;
+          } else {
+            // no y movement: pick smallest
+            if (penUp < penDown) this.playerCharacter.yPosition -= penUp; else this.playerCharacter.yPosition += penDown;
+          }
+        }
+
+        // Recompute player AABB after adjustment
+        px = this.playerCharacter.xPosition - halfW;
+        py = this.playerCharacter.yPosition - halfH;
+      }
+    }
   }
 
   private handleDirectionOverrides(): void {
