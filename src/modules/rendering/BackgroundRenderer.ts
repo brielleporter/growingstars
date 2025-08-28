@@ -23,7 +23,7 @@ export class BackgroundRenderer {
     return this.useBarrenBackground;
   }
 
-  public renderBackground(assets: GameAssets, isBarrenAvailable: boolean): void {
+  public renderBackground(assets: GameAssets, isBarrenAvailable: boolean, _cameraOffset?: { x: number; y: number }): void {
     // 1) Prefer dirt tile as base terrain
     if (assets.dirtTile.complete && assets.dirtTile.naturalWidth > 0) {
       this.renderDirtTileBackground(assets.dirtTile);

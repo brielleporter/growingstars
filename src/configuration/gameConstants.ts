@@ -53,6 +53,14 @@ export const WORLD_PIXEL_SIZE = {
   height: TILE_CONFIG.tileSize * WORLD_CONFIG.heightTiles,
 } as const;
 
+// House placement (tile grid)
+export const HOUSE_CONFIG = {
+  /** House base X tile index */
+  tileX: 19,
+  /** House base Y tile index; moved 3 tiles up from prior */
+  tileY: 8,
+} as const;
+
 // Player movement configuration
 export const PLAYER_CONFIG = {
   /** Movement speed in pixels per second */
