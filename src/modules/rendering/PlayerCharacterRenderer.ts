@@ -23,7 +23,7 @@ export class PlayerCharacterRenderer {
     };
   }
 
-  public renderPlayerCharacter(player: PlayerCharacter, assets: GameAssets): void {
+  public renderPlayerCharacter(player: PlayerCharacter, assets: GameAssets, cameraOffset?: { x: number; y: number }): void {
     if (!assets.playerSprite.complete || this.spriteConfig.frameWidth === 0) {
       return;
     }
@@ -33,13 +33,16 @@ export class PlayerCharacterRenderer {
     const displayWidth = this.spriteConfig.frameWidth * RENDER_CONFIG.playerScale;
     const displayHeight = this.spriteConfig.frameHeight * RENDER_CONFIG.playerScale;
 
+    const offsetX = cameraOffset?.x ?? 0;
+    const offsetY = cameraOffset?.y ?? 0;
+
     this.renderingContext.drawImage(
       assets.playerSprite,
       sourceX, sourceY, 
       this.spriteConfig.frameWidth, 
       this.spriteConfig.frameHeight,
-      Math.round(player.xPosition - displayWidth / 2),
-      Math.round(player.yPosition - displayHeight / 2),
+      Math.round(player.xPosition - displayWidth / 2 - offsetX),
+      Math.round(player.yPosition - displayHeight / 2 - offsetY),
       displayWidth, 
       displayHeight
     );

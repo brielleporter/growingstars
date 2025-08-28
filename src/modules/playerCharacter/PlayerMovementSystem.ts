@@ -3,7 +3,7 @@
  */
 
 import { PlayerCharacter, PlayerMovementInput } from '../../types/playerCharacter.types';
-import { SPRITE_DIRECTIONS, PLAYER_CONFIG, RENDER_CONFIG, SPRITE_SHEET_CONFIG, WORLD_PIXEL_SIZE } from '../../configuration/gameConstants';
+import { SPRITE_DIRECTIONS, PLAYER_CONFIG, RENDER_CONFIG, SPRITE_SHEET_CONFIG } from '../../configuration/gameConstants';
 import { KeyboardInputManager } from '../inputHandling/KeyboardInputManager';
 
 export class PlayerMovementSystem {
@@ -13,6 +13,7 @@ export class PlayerMovementSystem {
   private spriteFrameHeight = 0;
   private canvasRef: HTMLCanvasElement | null = null;
   private collisionRects: Array<{ x: number; y: number; w: number; h: number }> = [];
+  private worldBounds: { width: number; height: number } | null = null;
 
   constructor(inputManager: KeyboardInputManager) {
     this.inputManager = inputManager;
@@ -45,6 +46,14 @@ export class PlayerMovementSystem {
   /** Replace the current list of world collision rectangles (screen-space). */
   public setCollisionRects(rects: Array<{ x: number; y: number; w: number; h: number }>): void {
     this.collisionRects = rects || [];
+  }
+
+  public setWorldBounds(bounds: { width: number; height: number } | null): void {
+    this.worldBounds = bounds;
+  }
+
+  public setWorldSize(width: number, height: number): void {
+    this.worldBounds = { width, height };
   }
 
   // Collision debug accessor removed per request
@@ -134,9 +143,11 @@ export class PlayerMovementSystem {
     const halfWidth = displayWidth / 2;
     const halfHeight = displayHeight / 2;
 
-    // Effective bounds: intersection of canvas and world (pre-camera)
-    const maxX = Math.min(this.canvasRef.width, WORLD_PIXEL_SIZE.width) - halfWidth;
-    const maxY = Math.min(this.canvasRef.height, WORLD_PIXEL_SIZE.height) - halfHeight;
+    // Effective bounds: use world size if available; ignore canvas when using camera/world coords
+    const worldW = this.worldBounds?.width ?? this.canvasRef.width;
+    const worldH = this.worldBounds?.height ?? this.canvasRef.height;
+    const maxX = worldW - halfWidth;
+    const maxY = worldH - halfHeight;
     const minX = halfWidth;
     const minY = halfHeight;
 

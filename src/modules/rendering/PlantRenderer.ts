@@ -13,14 +13,17 @@ export class PlantRenderer {
     this.renderingContext = renderingContext;
   }
 
-  public renderAllPlants(plants: PlantEntity[], assets: GameAssets): void {
+  public renderAllPlants(plants: PlantEntity[], assets: GameAssets, cameraOffset?: { x: number; y: number }): void {
     plants.forEach(plant => {
-      this.renderSinglePlant(plant, assets);
+      this.renderSinglePlant(plant, assets, cameraOffset);
     });
   }
 
-  private renderSinglePlant(plant: PlantEntity, assets: GameAssets): void {
+  private renderSinglePlant(plant: PlantEntity, assets: GameAssets, cameraOffset?: { x: number; y: number }): void {
     this.renderingContext.save();
+    if (cameraOffset) {
+      this.renderingContext.translate(-cameraOffset.x, -cameraOffset.y);
+    }
     
     if (plant.plantType === 'orb' || plant.plantType === 'mushroom') {
       this.renderFourStageHorizontalPlant(plant, assets.plantSprites[plant.plantType]);
