@@ -1,0 +1,14 @@
+{ "columns":17,
+ "image":"exterior.png",
+ "imageheight":912,
+ "imagewidth":272,
+ "margin":0,
+ "name":"exterior",
+ "spacing":0,
+ "tilecount":969,
+ "tiledversion":"1.11.2",
+ "tileheight":16,
+ "tilewidth":16,
+ "type":"tileset",
+ "version":"1.10"
+}
