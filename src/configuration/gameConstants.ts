@@ -65,6 +65,13 @@ export const HOUSE_CONFIG = {
 export const PLAYER_CONFIG = {
   /** Movement speed in pixels per second */
   movementSpeed: 180,
+  /** Feet collision box (display-space). Use a narrow box at the bottom of the sprite for accurate layering. */
+  feetCollisionBox: {
+    /** Width as a ratio of the displayed sprite width (0..1). */
+    widthRatio: 0.4,
+    /** Height of the feet box in pixels (display-space). Typically a small slice near the bottom. */
+    heightPixels: 12,
+  },
 } as const;
 
 // Plant system configuration

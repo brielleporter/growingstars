@@ -160,14 +160,17 @@ export class PlayerMovementSystem {
 
     const displayWidth = this.spriteFrameWidth * RENDER_CONFIG.playerScale;
     const displayHeight = this.spriteFrameHeight * RENDER_CONFIG.playerScale;
-    const halfW = displayWidth / 2;
     const halfH = displayHeight / 2;
 
-    // Player AABB
-    let px = this.playerCharacter.xPosition - halfW;
-    let py = this.playerCharacter.yPosition - halfH;
-    const pw = displayWidth;
-    const ph = displayHeight;
+    // Feet collision box (narrow slice at bottom of sprite)
+    const feetWidth = Math.max(6, Math.min(displayWidth, displayWidth * PLAYER_CONFIG.feetCollisionBox.widthRatio));
+    const feetHeight = PLAYER_CONFIG.feetCollisionBox.heightPixels; // already display-space
+    let px = this.playerCharacter.xPosition - feetWidth / 2;
+    // bottom of sprite
+    const bottomY = this.playerCharacter.yPosition + halfH;
+    let py = bottomY - feetHeight;
+    const pw = feetWidth;
+    const ph = feetHeight;
 
     for (const r of this.collisionRects) {
       if (px < r.x + r.w && px + pw > r.x && py < r.y + r.h && py + ph > r.y) {
@@ -210,9 +213,10 @@ export class PlayerMovementSystem {
           }
         }
 
-        // Recompute player AABB after adjustment
-        px = this.playerCharacter.xPosition - halfW;
-        py = this.playerCharacter.yPosition - halfH;
+        // Recompute feet AABB after adjustment
+        px = this.playerCharacter.xPosition - pw / 2;
+        const newBottomY = this.playerCharacter.yPosition + halfH;
+        py = newBottomY - ph;
       }
     }
   }
