@@ -40,6 +40,8 @@ export class GameEngine {
   private worldMap: LoadedMap | null = null;
   private houseWorld = { x: 0, y: 0 };
   private centerOrigin = { x: 0, y: 0 }; // where the center map chunk starts in world space
+  private interactionAreas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' }> = [];
+  private staticCollisionRects: Array<{ x: number; y: number; w: number; h: number }> = [];
 
   // Game state
   private gameAssets!: GameAssets;
@@ -149,6 +151,8 @@ export class GameEngine {
       // Shift house position into center chunk space
       this.houseWorld.x += this.centerOrigin.x;
       this.houseWorld.y += this.centerOrigin.y;
+      // Build interaction areas and static collisions from interact layers
+      this.buildInteractionAreas();
       console.log(`Loaded world map: ${this.worldMap.widthTiles}x${this.worldMap.heightTiles} tiles`);
     } catch (err) {
       console.warn('Map load failed; using background fallback', err);
@@ -288,6 +292,11 @@ export class GameEngine {
       this.plantingInputHandler();
     }
 
+    // Handle interactions (e.g., well/ship)
+    if (this.keyboardInput.isKeyPressed('e')) {
+      this.handleInteractions();
+    }
+
 
     // Update collisions (house base as a blocking rect)
     this.updateWorldCollisions();
@@ -303,7 +312,7 @@ export class GameEngine {
   private updateWorldCollisions(): void {
     const base = this.gameAssets.buildings?.playerHouseBase;
     if (!base || !base.complete || base.naturalWidth === 0) {
-      this.playerMovement.setCollisionRects([]);
+      this.playerMovement.setCollisionRects(this.staticCollisionRects);
       return;
     }
     const dw = base.naturalWidth;
@@ -315,7 +324,62 @@ export class GameEngine {
     const cropH = RENDER_CONFIG.playerHouseCollisionSize.height;
     const cx = Math.floor((dx + dw / 2) - cropW / 2);
     const cy = Math.floor(dy + dh - cropH);
-    this.playerMovement.setCollisionRects([{ x: cx, y: cy, w: cropW, h: cropH }]);
+    const combined = [...this.staticCollisionRects, { x: cx, y: cy, w: cropW, h: cropH }];
+    this.playerMovement.setCollisionRects(combined);
+  }
+
+  private buildInteractionAreas(): void {
+    if (!this.worldMap) return;
+    const tile = TILE_CONFIG.tileSize;
+    const centerX = this.centerOrigin.x;
+    const centerY = this.centerOrigin.y;
+    const areas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' }> = [];
+
+    const collect = (layerName: string, kind: 'well' | 'ship') => {
+      const layer = this.worldMap!.layers.find(l => l.name === layerName);
+      if (!layer) return;
+      const w = layer.width;
+      const h = layer.height;
+      for (let ty = 0; ty < h; ty++) {
+        for (let tx = 0; tx < w; tx++) {
+          const gid = layer.data[ty * w + tx] | 0;
+          if (gid) {
+            const x = centerX + tx * tile;
+            const y = centerY + ty * tile;
+            areas.push({ x, y, w: tile, h: tile, kind });
+          }
+        }
+      }
+    };
+
+    collect('interactWell', 'well');
+    collect('interactShip', 'ship');
+
+    this.interactionAreas = areas;
+    this.staticCollisionRects = areas.map(a => ({ x: a.x, y: a.y, w: a.w, h: a.h }));
+  }
+
+  private handleInteractions(): void {
+    // Check if player's feet overlap any interaction area
+    const player = this.playerMovement.getPlayerCharacter();
+    const spriteCfg = this.playerRenderer.getSpriteConfiguration();
+    const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
+    const feetX = player.xPosition;
+    const feetY = player.yPosition + displayHeight / 2;
+    const pointRect = { x: feetX - 2, y: feetY - 2, w: 4, h: 4 };
+
+    const overlap = this.interactionAreas.find(a => this.rectsOverlap(pointRect, a));
+    if (overlap) {
+      if (overlap.kind === 'well') {
+        console.log('Interact: Well — TODO fill watering can');
+      } else if (overlap.kind === 'ship') {
+        console.log('Interact: Ship — TODO ship crops for money');
+      }
+    }
+  }
+
+  private rectsOverlap(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   }
 
   private renderFrame(): void {

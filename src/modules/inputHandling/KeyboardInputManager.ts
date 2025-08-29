@@ -5,7 +5,7 @@
 export class KeyboardInputManager {
   private pressedKeys = new Set<string>();
   private validKeys = [
-    'w', 'a', 's', 'd', 'p', 'b',
+    'w', 'a', 's', 'd', 'p', 'b', 'e',
     '1', '2', '3', '4'
   ];
 

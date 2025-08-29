@@ -43,6 +43,8 @@ export interface LoadedMap {
   tilesets: LoadedTileset[];
 }
 
+export type LayerIndex = Record<string, TiledLayer>;
+
 export class MapLoader {
   public async loadMap(mapPath: string): Promise<LoadedMap> {
     const map = await this.fetchJson<TiledMap>(mapPath);
