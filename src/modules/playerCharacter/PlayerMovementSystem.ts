@@ -109,15 +109,18 @@ export class PlayerMovementSystem {
         : SPRITE_DIRECTIONS.up;
     }
 
-    // Apply movement
+    // Apply movement (axis-separated to avoid diagonal corner tunneling or side pushes)
     const dx = movementInput.horizontalMovement * PLAYER_CONFIG.movementSpeed * deltaTimeSeconds;
     const dy = movementInput.verticalMovement * PLAYER_CONFIG.movementSpeed * deltaTimeSeconds;
 
-    this.playerCharacter.xPosition += dx;
-    this.playerCharacter.yPosition += dy;
-
-    // Resolve collisions against world rectangles
-    this.resolveCollisions(dx, dy);
+    if (dx !== 0) {
+      this.playerCharacter.xPosition += dx;
+      this.resolveCollisionsAxis('x', dx);
+    }
+    if (dy !== 0) {
+      this.playerCharacter.yPosition += dy;
+      this.resolveCollisionsAxis('y', dy);
+    }
   }
 
   private updateAnimation(movementInput: PlayerMovementInput, deltaTimeSeconds: number): void {
@@ -155,7 +158,7 @@ export class PlayerMovementSystem {
     this.playerCharacter.yPosition = Math.max(minY, Math.min(maxY, this.playerCharacter.yPosition));
   }
 
-  private resolveCollisions(dx: number, dy: number): void {
+  private resolveCollisionsAxis(axis: 'x' | 'y', delta: number): void {
     if (this.spriteFrameWidth === 0 || this.spriteFrameHeight === 0) return;
 
     const displayWidth = this.spriteFrameWidth * RENDER_CONFIG.playerScale;
@@ -180,37 +183,17 @@ export class PlayerMovementSystem {
         const overlapY1 = (r.y + r.h) - py;      // push down
         const overlapY2 = (py + ph) - r.y;       // push up
 
-        // Choose smallest penetration vector, favoring separating along movement axis
         const penLeft = overlapX2;
         const penRight = overlapX1;
         const penUp = overlapY2;
         const penDown = overlapY1;
 
-        // Decide axis: prefer the axis of greater movement magnitude
-        const preferX = Math.abs(dx) >= Math.abs(dy);
-
-        if (preferX) {
-          if (dx > 0) {
-            // moving right, push left
-            this.playerCharacter.xPosition -= penLeft;
-          } else if (dx < 0) {
-            // moving left, push right
-            this.playerCharacter.xPosition += penRight;
-          } else {
-            // no x movement: pick smallest
-            if (penLeft < penRight) this.playerCharacter.xPosition -= penLeft; else this.playerCharacter.xPosition += penRight;
-          }
+        if (axis === 'x') {
+          if (delta > 0) this.playerCharacter.xPosition -= penLeft; // moving right, push left
+          else this.playerCharacter.xPosition += penRight;           // moving left, push right
         } else {
-          if (dy > 0) {
-            // moving down, push up
-            this.playerCharacter.yPosition -= penUp;
-          } else if (dy < 0) {
-            // moving up, push down
-            this.playerCharacter.yPosition += penDown;
-          } else {
-            // no y movement: pick smallest
-            if (penUp < penDown) this.playerCharacter.yPosition -= penUp; else this.playerCharacter.yPosition += penDown;
-          }
+          if (delta > 0) this.playerCharacter.yPosition -= penUp;   // moving down, push up
+          else this.playerCharacter.yPosition += penDown;            // moving up, push down
         }
 
         // Recompute feet AABB after adjustment

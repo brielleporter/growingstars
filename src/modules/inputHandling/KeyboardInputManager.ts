@@ -8,15 +8,19 @@ export class KeyboardInputManager {
     'w', 'a', 's', 'd', 'p', 'b', 'e',
     '1', '2', '3', '4'
   ];
+  private boundDown?: (e: KeyboardEvent) => void;
+  private boundUp?: (e: KeyboardEvent) => void;
 
   public initialize(): void {
-    addEventListener('keydown', this.handleKeyDown.bind(this));
-    addEventListener('keyup', this.handleKeyUp.bind(this));
+    if (!this.boundDown) this.boundDown = this.handleKeyDown.bind(this);
+    if (!this.boundUp) this.boundUp = this.handleKeyUp.bind(this);
+    addEventListener('keydown', this.boundDown);
+    addEventListener('keyup', this.boundUp);
   }
 
   public cleanup(): void {
-    removeEventListener('keydown', this.handleKeyDown.bind(this));
-    removeEventListener('keyup', this.handleKeyUp.bind(this));
+    if (this.boundDown) removeEventListener('keydown', this.boundDown);
+    if (this.boundUp) removeEventListener('keyup', this.boundUp);
   }
 
   public isKeyPressed(key: string): boolean {
