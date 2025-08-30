@@ -3,7 +3,8 @@
  */
 
 import { GameAssets } from '../types/gameAssets.types';
-import { SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG, TILE_CONFIG, WORLD_CONFIG, HARVEST_EFFECT_CONFIG, HOUSE_CONFIG } from '../configuration/gameConstants';
+import { SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG, TILE_CONFIG, WORLD_CONFIG, HARVEST_EFFECT_CONFIG, HOUSE_CONFIG, PLANT_PRICES } from '../configuration/gameConstants';
+import { InventorySystem } from '../modules/inventory/InventorySystem';
 import { PlayerCharacter } from '../types/playerCharacter.types';
 import { AssetLoader } from '../assetManagement/AssetLoader';
 import { KeyboardInputManager } from '../modules/inputHandling/KeyboardInputManager';
@@ -37,6 +38,8 @@ export class GameEngine {
   private mapLoader: MapLoader;
   private tilemapRenderer: TilemapRenderer;
   private worldMap: LoadedMap | null = null;
+  private interactionAreas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' }>=[];
+  private staticCollisionRects: Array<{ x: number; y: number; w: number; h: number }>=[];
   private camera!: Camera;
   private centerOrigin = { x: 0, y: 0 };
   private houseWorld = { x: 0, y: 0 };
@@ -47,6 +50,7 @@ export class GameEngine {
   private lastTimestamp = 0;
   private harvestingInputHandler?: () => void;
   private activeEffects: Array<{ x: number; baselineY: number; start: number; kind: 'slash'; row: number; targetHeight: number }>=[];
+  private inventory: InventorySystem;
 
   constructor(canvasElementId: string) {
     const canvas = document.getElementById(canvasElementId) as HTMLCanvasElement;
@@ -73,6 +77,7 @@ export class GameEngine {
     this.playerMovement = new PlayerMovementSystem(this.keyboardInput);
     this.playerMovement.setCanvasReference(this.canvas);
     this.plantManagement = new PlantManagementSystem();
+    this.inventory = new InventorySystem(0);
 
     // Initialize renderers
     this.backgroundRenderer = new BackgroundRenderer(this.renderingContext);
@@ -135,6 +140,8 @@ export class GameEngine {
       const hx = this.centerOrigin.x + Math.floor((HOUSE_CONFIG.tileX + 0.5) * tile);
       const hy = this.centerOrigin.y + Math.floor((HOUSE_CONFIG.tileY + 1) * tile);
       this.houseWorld = { x: hx, y: hy };
+      // Build interaction areas and static collisions
+      this.buildInteractionAreas();
       console.log('Loaded Tiled map:', this.worldMap.widthTiles, 'x', this.worldMap.heightTiles);
     } catch (e) {
       console.warn('Failed to load Tiled map:', e);
@@ -212,6 +219,8 @@ export class GameEngine {
           const target = this.calculatePlantingPosition(player);
           const harvested = this.plantManagement.harvestNearest(target, HARVEST_REACH);
           if (harvested) {
+            // Add to inventory
+            this.inventory.addPlant(harvested.plantType);
             // Spawn slash effect centered on player feet
             const spriteCfg = this.playerRenderer.getSpriteConfiguration();
             const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
@@ -313,6 +322,10 @@ export class GameEngine {
     if (this.plantingInputHandler) {
       this.plantingInputHandler();
     }
+    // Handle interactions (E key)
+    if (this.keyboardInput.isKeyPressed('e')) {
+      this.handleInteractions();
+    }
     // Handle harvesting input
     if (this.harvestingInputHandler) {
       this.harvestingInputHandler();
@@ -337,7 +350,7 @@ export class GameEngine {
   private updateWorldCollisions(): void {
     const base = this.gameAssets.buildings?.playerHouseBase;
     if (!base || !base.complete || base.naturalWidth === 0) {
-      this.playerMovement.setCollisionRects([]);
+      this.playerMovement.setCollisionRects(this.staticCollisionRects);
       return;
     }
     const dw = base.naturalWidth;
@@ -349,7 +362,58 @@ export class GameEngine {
     const cropH = RENDER_CONFIG.playerHouseCollisionSize.height;
     const cx = Math.floor((dx + dw / 2) - cropW / 2);
     const cy = Math.floor(dy + dh - cropH);
-    this.playerMovement.setCollisionRects([{ x: cx, y: cy, w: cropW, h: cropH }]);
+    const combined = [...this.staticCollisionRects, { x: cx, y: cy, w: cropW, h: cropH }];
+    this.playerMovement.setCollisionRects(combined);
+  }
+
+  private buildInteractionAreas(): void {
+    if (!this.worldMap) return;
+    const tile = TILE_CONFIG.tileSize;
+    const baseLayerOffset = { x: this.centerOrigin.x, y: this.centerOrigin.y };
+    const areas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' }> = [];
+    const addFromLayer = (name: string, kind: 'well' | 'ship') => {
+      const layer = this.worldMap!.layers.find(l => l.name === name);
+      if (!layer) return;
+      const w = layer.width, h = layer.height;
+      for (let ty = 0; ty < h; ty++) {
+        for (let tx = 0; tx < w; tx++) {
+          if (layer.data[ty * w + tx]) {
+            areas.push({ x: baseLayerOffset.x + tx * tile, y: baseLayerOffset.y + ty * tile, w: tile, h: tile, kind });
+          }
+        }
+      }
+    };
+    addFromLayer('interactWell', 'well');
+    addFromLayer('interactShip', 'ship');
+    this.interactionAreas = areas;
+    // Make them collidable by default
+    this.staticCollisionRects = areas.map(a => ({ x: a.x, y: a.y, w: a.w, h: a.h }));
+  }
+
+  private handleInteractions(): void {
+    // Use player's feet position
+    const player = this.playerMovement.getPlayerCharacter();
+    const spriteCfg = this.playerRenderer.getSpriteConfiguration();
+    const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
+    const feetX = player.xPosition;
+    const feetY = player.yPosition + displayHeight / 2;
+    const probe = { x: feetX - 2, y: feetY - 2, w: 4, h: 4 };
+    const hit = this.interactionAreas.find(a => this.rectsOverlap(probe, a));
+    if (!hit) return;
+    if (hit.kind === 'ship') {
+      const res = this.inventory.sellAll(PLANT_PRICES as any);
+      if (res.coinsGained > 0) {
+        console.log(`Shipped goods for ${res.coinsGained} coins. Total coins: ${this.inventory.getCoins()}`);
+      } else {
+        console.log('Nothing to ship.');
+      }
+    } else if (hit.kind === 'well') {
+      console.log('Interacted with well. TODO: add water system.');
+    }
+  }
+
+  private rectsOverlap(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   }
 
   private renderFrame(): void {
@@ -407,6 +471,9 @@ export class GameEngine {
 
     // Render building roofs (above player)
     this.buildingRenderer.renderBuildingRoofs(this.gameAssets, { x: this.camera.x, y: this.camera.y }, this.houseWorld);
+
+    // HUD and prompts (screen-space)
+    this.renderHUD();
   }
 
   private renderEffects(): void {
@@ -461,6 +528,64 @@ export class GameEngine {
       if (frameIndex < columns) return true;
     }
     return false;
+  }
+
+  private renderHUD(): void {
+    const ctx = this.renderingContext;
+    // Gather inventory state
+    const inv = this.inventory.getState();
+    const counts = inv.counts;
+    const lines: string[] = [
+      `Coins: ${inv.coins}`,
+      ...Object.keys(counts).map(k => `${k}: ${counts[k as keyof typeof counts]}`)
+    ];
+    const padding = 8;
+    const lineH = 16;
+    const boxW = 160;
+    const boxH = padding * 2 + lineH * lines.length;
+    ctx.save();
+    // Box top-left
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(10, 10, boxW, boxH);
+    ctx.globalAlpha = 1.0;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '12px monospace';
+    lines.forEach((t, i) => ctx.fillText(t, 10 + padding, 10 + padding + (i + 1) * lineH - 4));
+
+    // Contextual prompt if in range of interaction
+    const prompt = this.getInteractionPrompt();
+    if (prompt) {
+      const canvas = ctx.canvas;
+      const pw = ctx.measureText(prompt).width + 20;
+      const ph = 28;
+      const px = Math.floor((canvas.width - pw) / 2);
+      const py = canvas.height - ph - 16;
+      ctx.globalAlpha = 0.75;
+      ctx.fillStyle = '#111111';
+      ctx.fillRect(px, py, pw, ph);
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '14px monospace';
+      ctx.fillText(prompt, px + 10, py + 18);
+    }
+    ctx.restore();
+  }
+
+  private getInteractionPrompt(): string | null {
+    // Use player's feet to test overlap
+    const player = this.playerMovement.getPlayerCharacter();
+    const spriteCfg = this.playerRenderer.getSpriteConfiguration();
+    if (!spriteCfg.frameHeight) return null;
+    const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
+    const feetX = player.xPosition;
+    const feetY = player.yPosition + displayHeight / 2;
+    const probe = { x: feetX - 2, y: feetY - 2, w: 4, h: 4 };
+    const hit = this.interactionAreas.find(a => this.rectsOverlap(probe, a));
+    if (!hit) return null;
+    if (hit.kind === 'ship') return 'Press E to ship crops';
+    if (hit.kind === 'well') return 'Press E to fill water (TODO)';
+    return null;
   }
 
   // Collision debug overlay removed per request

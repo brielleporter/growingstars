@@ -98,6 +98,16 @@ export const PLANT_CONFIG = {
   seedScaleFactor: 0.5,
 } as const;
 
+// Economy configuration: simple per-plant sell prices
+export const PLANT_PRICES: Record<string, number> = {
+  eye: 5,
+  tentacle: 6,
+  jaws: 7,
+  spike: 8,
+  orb: 10,
+  mushroom: 4,
+} as const;
+
 // Canvas configuration
 export const CANVAS_CONFIG = {
   width: 800,
