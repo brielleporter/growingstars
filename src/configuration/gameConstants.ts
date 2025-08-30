@@ -20,8 +20,8 @@ export const SPRITE_DIRECTIONS = {
 export const RENDER_CONFIG = {
   /** Scale factor for player character sprites */
   playerScale: 1.5, // 2x larger than current (0.75 * 2 = 1.5)
-  /** Scale factor for plant sprites */
-  plantScale: 1.5, // 4x larger than current (0.375 * 4 = 1.5) 
+  /** Scale factor for plant sprites (slightly smaller footprint) */
+  plantScale: 1.15,
   /** Optional tight crop for the player house base collision (source pixels, before scaling). */
   playerHouseCollisionSize: {
     width: 222,
