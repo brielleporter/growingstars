@@ -82,7 +82,8 @@ export class GameEngine {
     this.playerMovement = new PlayerMovementSystem(this.keyboardInput);
     this.playerMovement.setCanvasReference(this.canvas);
     this.plantManagement = new PlantManagementSystem();
-    this.inventory = new InventorySystem(0);
+    // Start with some water capacity (e.g., 10 units) and full can
+    this.inventory = new InventorySystem(0, undefined, 10, 10);
 
     // Initialize renderers
     this.backgroundRenderer = new BackgroundRenderer(this.renderingContext);
@@ -249,6 +250,11 @@ export class GameEngine {
     const now = performance.now();
     const spriteCfg = this.playerRenderer.getSpriteConfiguration();
     if (!spriteCfg.frameHeight) return;
+    // Require water to perform watering
+    if (!this.inventory.useWater(1)) {
+      this.pushNotification('Out of water');
+      return;
+    }
     const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
     const baselineY = player.yPosition + displayHeight / 2;
     const targetHeight = Math.floor(displayHeight * WATER_EFFECT_CONFIG.scale);
@@ -459,7 +465,10 @@ export class GameEngine {
       // while the player remains in range. It will show again after they leave and return.
       this.suppressEmptyShipPrompt = true;
     } else if (near.kind === 'well') {
-      this.pushNotification('Filled water (TODO system)');
+      const before = this.inventory.getWater();
+      this.inventory.refillWater();
+      const after = this.inventory.getWater();
+      if (after > before) this.pushNotification('Water refilled');
     }
   }
 
@@ -597,7 +606,7 @@ export class GameEngine {
     // Gather inventory state
     const inv = this.inventory.getState();
     const counts = inv.counts;
-    const lines: string[] = [`Coins: ${inv.coins}`];
+    const lines: string[] = [`Coins: ${inv.coins}`, `Water: ${this.inventory.getWater()}/${this.inventory.getWaterCapacity()}`];
     (Object.keys(counts) as Array<keyof typeof counts>).forEach(k => lines.push(`${String(k)}: ${counts[k]}`));
     const padding = 8;
     const lineH = 16;

@@ -5,8 +5,10 @@ export class InventorySystem {
   private counts: InventoryCounts;
   private coins: number;
   private capacity?: number;
+  private water: number;
+  private waterCapacity: number;
 
-  constructor(initialCoins = 0, capacity?: number) {
+  constructor(initialCoins = 0, capacity?: number, initialWater = 10, waterCapacity = 10) {
     this.counts = {
       eye: 0,
       tentacle: 0,
@@ -17,6 +19,8 @@ export class InventorySystem {
     };
     this.coins = initialCoins;
     this.capacity = capacity;
+    this.water = Math.max(0, Math.min(initialWater, waterCapacity));
+    this.waterCapacity = waterCapacity;
   }
 
   public addPlant(type: PlantType): boolean {
@@ -56,5 +60,14 @@ export class InventorySystem {
   public getState(): InventoryState {
     return { counts: { ...this.counts }, coins: this.coins, capacity: this.capacity };
   }
-}
 
+  // Water can APIs
+  public getWater(): number { return this.water; }
+  public getWaterCapacity(): number { return this.waterCapacity; }
+  public refillWater(): void { this.water = this.waterCapacity; }
+  public useWater(units = 1): boolean {
+    if (this.water < units) return false;
+    this.water -= units;
+    return true;
+  }
+}
