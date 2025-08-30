@@ -51,6 +51,9 @@ export class GameEngine {
   private lastTimestamp = 0;
   private harvestingInputHandler?: () => void;
   private activeEffects: Array<{ x: number; baselineY: number; start: number; kind: 'slash'; row: number; targetHeight: number; targetPlant?: PlantEntity }>=[];
+  private notifications: Array<{ text: string; until: number }> = [];
+  private wasEPressed = false;
+  private suppressEmptyShipPrompt = false;
   private inventory: InventorySystem;
 
   constructor(canvasElementId: string) {
@@ -325,10 +328,12 @@ export class GameEngine {
     if (this.plantingInputHandler) {
       this.plantingInputHandler();
     }
-    // Handle interactions (E key)
-    if (this.keyboardInput.isKeyPressed('e')) {
+    // Handle interactions (E key) on key-down edge to avoid spamming
+    const ePressed = this.keyboardInput.isKeyPressed('e');
+    if (ePressed && !this.wasEPressed) {
       this.handleInteractions();
     }
+    this.wasEPressed = ePressed;
     // Handle harvesting input
     if (this.harvestingInputHandler) {
       this.harvestingInputHandler();
@@ -390,30 +395,25 @@ export class GameEngine {
   }
 
   private handleInteractions(): void {
-    // Use player's feet position
-    const player = this.playerMovement.getPlayerCharacter();
-    const spriteCfg = this.playerRenderer.getSpriteConfiguration();
-    const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
-    const feetX = player.xPosition;
-    const feetY = player.yPosition + displayHeight / 2;
-    const probe = { x: feetX - 2, y: feetY - 2, w: 4, h: 4 };
-    const hit = this.interactionAreas.find(a => this.rectsOverlap(probe, a));
-    if (!hit) return;
-    if (hit.kind === 'ship') {
-      const res = this.inventory.sellAll(PLANT_PRICES as any);
-      if (res.coinsGained > 0) {
-        console.log(`Shipped goods for ${res.coinsGained} coins. Total coins: ${this.inventory.getCoins()}`);
-      } else {
-        console.log('Nothing to ship.');
+    const near = this.getFeetAdjacentInteraction();
+    if (!near) return;
+    if (near.kind === 'ship') {
+      const { items, coins } = this.computeSalePreview();
+      if (items <= 0 || coins <= 0) {
+        this.pushNotification('Nothing to ship');
+        return;
       }
-    } else if (hit.kind === 'well') {
-      console.log('Interacted with well. TODO: add water system.');
+      const res = this.inventory.sellAll(PLANT_PRICES as any);
+      this.pushNotification(`Shipped ${items} for ${res.coinsGained} coins`);
+      // After a successful sale, suppress the immediate 'Nothing to ship' prompt
+      // while the player remains in range. It will show again after they leave and return.
+      this.suppressEmptyShipPrompt = true;
+    } else if (near.kind === 'well') {
+      this.pushNotification('Filled water (TODO system)');
     }
   }
 
-  private rectsOverlap(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean {
-    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-  }
+  // No longer used: adjacency check handles interactions more reliably with collidable tiles
 
   private renderFrame(): void {
     // Clear canvas
@@ -543,10 +543,8 @@ export class GameEngine {
     // Gather inventory state
     const inv = this.inventory.getState();
     const counts = inv.counts;
-    const lines: string[] = [
-      `Coins: ${inv.coins}`,
-      ...Object.keys(counts).map(k => `${k}: ${counts[k as keyof typeof counts]}`)
-    ];
+    const lines: string[] = [`Coins: ${inv.coins}`];
+    (Object.keys(counts) as Array<keyof typeof counts>).forEach(k => lines.push(`${String(k)}: ${counts[k]}`));
     const padding = 8;
     const lineH = 16;
     const boxW = 160;
@@ -577,23 +575,84 @@ export class GameEngine {
       ctx.font = '14px monospace';
       ctx.fillText(prompt, px + 10, py + 18);
     }
+
+    // Notifications (stacked above prompt)
+    const now = performance.now();
+    this.notifications = this.notifications.filter(n => n.until > now);
+    if (this.notifications.length) {
+      const canvas = ctx.canvas;
+      let y = canvas.height - 60;
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = '#000000';
+      ctx.font = '14px monospace';
+      this.notifications.forEach(n => {
+        const w = ctx.measureText(n.text).width + 20;
+        const x = Math.floor((canvas.width - w) / 2);
+        ctx.fillRect(x, y, w, 26);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(n.text, x + 10, y + 18);
+        ctx.fillStyle = '#000000';
+        y -= 32;
+      });
+      ctx.globalAlpha = 1.0;
+    }
     ctx.restore();
   }
 
   private getInteractionPrompt(): string | null {
-    // Use player's feet to test overlap
+    const near = this.getFeetAdjacentInteraction();
+    if (!near) {
+      // Reset suppression when player leaves interaction range
+      this.suppressEmptyShipPrompt = false;
+      return null;
+    }
+    if (near.kind === 'ship') {
+      const { items, coins } = this.computeSalePreview();
+      if (items > 0) return `Press E to ship ${items} for ${coins} coins`;
+      // Items are empty
+      return this.suppressEmptyShipPrompt ? null : 'Nothing to ship';
+    }
+    if (near.kind === 'well') return 'Press E to fill water (TODO)';
+    return null;
+  }
+
+  private getFeetAdjacentInteraction(): { kind: 'well' | 'ship' } | null {
     const player = this.playerMovement.getPlayerCharacter();
     const spriteCfg = this.playerRenderer.getSpriteConfiguration();
     if (!spriteCfg.frameHeight) return null;
     const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
     const feetX = player.xPosition;
     const feetY = player.yPosition + displayHeight / 2;
-    const probe = { x: feetX - 2, y: feetY - 2, w: 4, h: 4 };
-    const hit = this.interactionAreas.find(a => this.rectsOverlap(probe, a));
-    if (!hit) return null;
-    if (hit.kind === 'ship') return 'Press E to ship crops';
-    if (hit.kind === 'well') return 'Press E to fill water (TODO)';
+    const tile = TILE_CONFIG.tileSize;
+    const ftX = Math.floor(feetX / tile);
+    const ftY = Math.floor(feetY / tile);
+    // Adjacent if same tile or orthogonally neighboring tiles
+    for (const a of this.interactionAreas) {
+      const ax = Math.floor(a.x / tile);
+      const ay = Math.floor(a.y / tile);
+      const manhattan = Math.abs(ftX - ax) + Math.abs(ftY - ay);
+      if (manhattan <= 1) {
+        return { kind: a.kind };
+      }
+    }
     return null;
+  }
+
+  private computeSalePreview(): { items: number; coins: number } {
+    const inv = this.inventory.getState();
+    let items = 0;
+    let coins = 0;
+    (Object.keys(inv.counts) as Array<keyof typeof inv.counts>).forEach(k => {
+      const qty = inv.counts[k] || 0;
+      items += qty;
+      const price = (PLANT_PRICES as any)[k] || 0;
+      coins += qty * price;
+    });
+    return { items, coins };
+  }
+
+  private pushNotification(text: string, durationMs = 1800): void {
+    this.notifications.push({ text, until: performance.now() + durationMs });
   }
 
   // Collision debug overlay removed per request
