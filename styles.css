@@ -23,7 +23,7 @@ html, body {
 
 .legend {
   position: fixed;
-  top: 20px;
+  bottom: 20px;
   right: 20px;
   background: rgba(0, 0, 0, 0.8);
   border: 1px solid #444;
@@ -57,4 +57,3 @@ kbd {
   border-radius: 4px;
   font-size: 0.9em;
 }
-

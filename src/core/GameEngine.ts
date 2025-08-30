@@ -714,28 +714,7 @@ export class GameEngine {
     }
     ctx.restore();
 
-    // Controls overlay (top-right)
-    ctx.save();
-    const ctrl = [
-      'Controls:',
-      'WASD: Move',
-      'P: Plant seed',
-      'Q: Water (start growth)',
-      'H: Harvest (final stage)',
-      'E: Interact (Ship/Well/House)',
-      'B: Toggle background',
-    ];
-    const cw = 220;
-    const ch = padding * 2 + lineH * ctrl.length;
-    const canvas = this.renderingContext.canvas;
-    ctx.globalAlpha = 0.6;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(canvas.width - cw - 10, 10, cw, ch);
-    ctx.globalAlpha = 1.0;
-    ctx.fillStyle = '#fff';
-    ctx.font = '12px monospace';
-    ctrl.forEach((t, i) => ctx.fillText(t, canvas.width - cw - 10 + padding, 10 + padding + (i + 1) * lineH - 4));
-    ctx.restore();
+    // Controls overlay removed; using HTML legend instead
 
     // Fade overlay (last)
     if (this.fadeTransition.active) {
