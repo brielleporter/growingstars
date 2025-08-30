@@ -31,6 +31,18 @@ export const RENDER_CONFIG = {
   framesPerSecond: 10,
 } as const;
 
+// Harvest/slash effect spritesheet configuration
+export const HARVEST_EFFECT_CONFIG = {
+  /** Columns in the slash sprite sheet (per row) */
+  columns: 6,
+  /** Rows in the slash sprite sheet (facing: up, left, down, right) */
+  rows: 4,
+  /** Playback fps for slash animation */
+  framesPerSecond: 20,
+  /** Scale to apply when drawing the slash */
+  scale: 1.0,
+} as const;
+
 // Tile configuration
 export const TILE_CONFIG = {
   /** Base square tile size in pixels */

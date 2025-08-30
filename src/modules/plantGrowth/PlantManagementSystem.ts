@@ -52,6 +52,57 @@ export class PlantManagementSystem {
     this.plantedEntities = [];
   }
 
+  /** Attempt to harvest a mature plant near the given position. Returns the harvested plant (or null). */
+  public harvestNearest(position: { x: number; y: number }, maxDistance: number): PlantEntity | null {
+    let bestIndex = -1;
+    let bestDistSq = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < this.plantedEntities.length; i++) {
+      const p = this.plantedEntities[i];
+      if (!p.hasGrown) continue; // only mature plants
+      const dx = p.xPosition - position.x;
+      const dy = p.yPosition - position.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < bestDistSq && distSq <= maxDistance * maxDistance) {
+        bestDistSq = distSq;
+        bestIndex = i;
+      }
+    }
+    if (bestIndex >= 0) {
+      const harvested = this.plantedEntities.splice(bestIndex, 1)[0];
+      console.log(`Harvested ${harvested.plantType} at (${harvested.xPosition}, ${harvested.yPosition})`);
+      return harvested;
+    }
+    return null;
+  }
+
+  /** Find nearest mature plant within maxDistance of position, without removing it. */
+  public findNearestMature(position: { x: number; y: number }, maxDistance: number): PlantEntity | null {
+    let best: PlantEntity | null = null;
+    let bestDistSq = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < this.plantedEntities.length; i++) {
+      const p = this.plantedEntities[i];
+      if (!p.hasGrown) continue;
+      const dx = p.xPosition - position.x;
+      const dy = p.yPosition - position.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 <= maxDistance * maxDistance && d2 < bestDistSq) {
+        bestDistSq = d2;
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  /** Remove a specific plant entity by reference. Returns true if removed. */
+  public removePlant(plant: PlantEntity): boolean {
+    const idx = this.plantedEntities.indexOf(plant);
+    if (idx >= 0) {
+      this.plantedEntities.splice(idx, 1);
+      return true;
+    }
+    return false;
+  }
+
   private plantSeed(position: ClickPosition): void {
     const randomPlantType = this.getRandomPlantType();
     

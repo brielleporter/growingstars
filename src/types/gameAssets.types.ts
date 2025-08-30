@@ -7,6 +7,8 @@ import { PlantType } from './plantSystem.types';
 export interface GameAssets {
   /** Player character sprite sheet */
   playerSprite: HTMLImageElement;
+  /** Slash/harvest sprite sheet */
+  harvestSlashSprite: HTMLImageElement;
   /** Home background image */
   homeBackground: HTMLImageElement;
   /** Barren/alien background image (optional, may be empty path) */
@@ -27,6 +29,8 @@ export interface GameAssets {
 export interface AssetPaths {
   /** Path to player sprite sheet */
   playerSpriteSheet: string;
+  /** Path to harvest slash sprite sheet */
+  harvestSlashSpriteSheet: string;
   /** Path to home background */
   homeBackground: string;
   /** Path to barren background (can be empty to use procedural) */

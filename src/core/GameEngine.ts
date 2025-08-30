@@ -3,7 +3,8 @@
  */
 
 import { GameAssets } from '../types/gameAssets.types';
-import { SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG, TILE_CONFIG, WORLD_CONFIG, HOUSE_CONFIG } from '../configuration/gameConstants';
+import { PlantEntity } from '../types/plantSystem.types';
+import { SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG, TILE_CONFIG, WORLD_CONFIG, HOUSE_CONFIG, HARVEST_EFFECT_CONFIG } from '../configuration/gameConstants';
 import { PlayerCharacter } from '../types/playerCharacter.types';
 import { AssetLoader } from '../assetManagement/AssetLoader';
 import { KeyboardInputManager } from '../modules/inputHandling/KeyboardInputManager';
@@ -42,6 +43,17 @@ export class GameEngine {
   private centerOrigin = { x: 0, y: 0 }; // where the center map chunk starts in world space
   private interactionAreas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' }> = [];
   private staticCollisionRects: Array<{ x: number; y: number; w: number; h: number }> = [];
+  
+  private harvestingInputHandler?: () => void;
+  private activeEffects: Array<{
+    x: number;
+    baselineY: number;
+    start: number;
+    kind: 'slash';
+    row: number;
+    targetHeight: number;
+    targetPlant?: PlantEntity;
+  }>=[];
 
   // Game state
   private gameAssets!: GameAssets;
@@ -164,6 +176,8 @@ export class GameEngine {
 
     // Set up plant placement on P key press
     this.setupPlantingInput();
+    // Set up harvesting on H key press
+    this.setupHarvestingInput();
 
     // Initialize sprite dimensions when player sprite loads
     this.gameAssets.playerSprite.onload = () => {
@@ -216,6 +230,37 @@ export class GameEngine {
 
     // Check for P key every frame (will be called in game loop)
     this.plantingInputHandler = plantingHandler;
+  }
+
+  private setupHarvestingInput(): void {
+    // Handle H key for harvesting mature plants
+    let lastHarvestTime = 0;
+    const HARVEST_COOLDOWN = 350; // ms between harvests
+    const HARVEST_REACH = TILE_CONFIG.tileSize * 0.9;
+
+    const harvestHandler = () => {
+      if (this.keyboardInput.isKeyPressed('h')) {
+        const now = performance.now();
+        if (now - lastHarvestTime > HARVEST_COOLDOWN) {
+          const player = this.playerMovement.getPlayerCharacter();
+          const target = this.calculatePlantingPosition(player);
+          const targetPlant = this.plantManagement.findNearestMature(target, HARVEST_REACH);
+          if (targetPlant) {
+            const p = this.playerMovement.getPlayerCharacter();
+            // Map facing to slash row: up=0, left=1, down=2, right=3
+            const row = p.currentRow; // SPRITE_DIRECTIONS already matches order
+            const spriteCfg = this.playerRenderer.getSpriteConfiguration();
+            const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
+            const baselineY = p.yPosition + displayHeight / 2;
+            const targetHeight = Math.floor(displayHeight * HARVEST_EFFECT_CONFIG.scale);
+            this.activeEffects.push({ x: p.xPosition, baselineY, start: now, kind: 'slash', row, targetHeight, targetPlant });
+          }
+          lastHarvestTime = now;
+        }
+      }
+    };
+
+    this.harvestingInputHandler = harvestHandler;
   }
 
   private plantingInputHandler?: () => void;
@@ -290,6 +335,9 @@ export class GameEngine {
     // Handle planting input
     if (this.plantingInputHandler) {
       this.plantingInputHandler();
+    }
+    if (this.harvestingInputHandler) {
+      this.harvestingInputHandler();
     }
 
     // Handle interactions (e.g., well/ship)
@@ -485,12 +533,19 @@ export class GameEngine {
       { x: this.camera.x, y: this.camera.y }
     );
 
-    // Render player character
-    this.playerRenderer.renderPlayerCharacter(
-      this.playerMovement.getPlayerCharacter(),
-      this.gameAssets,
-      { x: this.camera.x, y: this.camera.y }
-    );
+    // Render player character unless a slash effect is replacing idle
+    const playerForRender = this.playerMovement.getPlayerCharacter();
+    const replaceIdleWithSlash = !playerForRender.isMoving && this.hasActiveSlashEffect();
+    if (!replaceIdleWithSlash) {
+      this.playerRenderer.renderPlayerCharacter(
+        playerForRender,
+        this.gameAssets,
+        { x: this.camera.x, y: this.camera.y }
+      );
+    }
+
+    // Render transient effects above player (e.g., slash)
+    this.renderEffects();
 
     // Render building roofs (above player)
     this.buildingRenderer.renderBuildingRoofs(
@@ -498,6 +553,72 @@ export class GameEngine {
       { x: this.camera.x, y: this.camera.y },
       this.houseWorld
     );
+  }
+
+  private renderEffects(): void {
+    const now = performance.now();
+    const ctx = this.renderingContext;
+    const img = this.gameAssets.harvestSlashSprite;
+    if (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) {
+      this.activeEffects = [];
+      return;
+    }
+    const { columns, rows, framesPerSecond } = HARVEST_EFFECT_CONFIG;
+    const totalFrames = columns; // per-row animation length
+    const frameW = Math.floor(img.naturalWidth / columns);
+    const frameH = Math.floor(img.naturalHeight / rows);
+    const secPerFrame = 1 / framesPerSecond;
+
+    const effectsLeft: typeof this.activeEffects = [];
+    for (const e of this.activeEffects) {
+      // Compute frame by elapsed time
+      const elapsed = (now - e.start) / 1000;
+      const frameIndex = Math.floor(elapsed / secPerFrame);
+      if (frameIndex >= totalFrames) {
+        // Effect finished; if tied to a plant, remove it now
+        if (e.kind === 'slash' && e.targetPlant) {
+          this.plantManagement.removePlant(e.targetPlant);
+        }
+        continue; // done
+      }
+      effectsLeft.push(e);
+
+      const col = frameIndex % columns;
+      const row = Math.max(0, Math.min(rows - 1, e.row));
+      const sx = col * frameW;
+      const sy = row * frameH;
+      const dh = Math.max(1, Math.floor(e.targetHeight));
+      const dw = Math.max(1, Math.floor((frameW / frameH) * dh));
+
+      ctx.save();
+      ctx.translate(-this.camera.x, -this.camera.y);
+      ctx.globalAlpha = 0.95;
+      // Bottom-center align to player's baseline (feet)
+      ctx.drawImage(
+        img,
+        sx, sy, frameW, frameH,
+        Math.round(e.x - dw / 2),
+        Math.round(e.baselineY - dh),
+        dw, dh
+      );
+      ctx.restore();
+    }
+    this.activeEffects = effectsLeft;
+  }
+
+  private hasActiveSlashEffect(): boolean {
+    const now = performance.now();
+    const img = this.gameAssets.harvestSlashSprite;
+    if (!img || !img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) return false;
+    const { columns, framesPerSecond } = HARVEST_EFFECT_CONFIG;
+    const secPerFrame = 1 / framesPerSecond;
+    for (const e of this.activeEffects) {
+      if (e.kind !== 'slash') continue;
+      const elapsed = (now - e.start) / 1000;
+      const frameIndex = Math.floor(elapsed / secPerFrame);
+      if (frameIndex < columns) return true;
+    }
+    return false;
   }
 
   // Collision debug overlay removed per request

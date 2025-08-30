@@ -15,6 +15,7 @@ export class AssetLoader {
   constructor() {
     this.assets = {
       playerSprite: new Image(),
+      harvestSlashSprite: new Image(),
       homeBackground: new Image(),
       barrenBackground: new Image(),
       dirtTile: new Image(),
@@ -42,6 +43,7 @@ export class AssetLoader {
     
     // Load basic assets
     this.loadAsset(this.assets.playerSprite, ASSET_PATHS.playerSpriteSheet);
+    this.loadAsset(this.assets.harvestSlashSprite, ASSET_PATHS.harvestSlashSpriteSheet);
     this.loadAsset(this.assets.homeBackground, ASSET_PATHS.homeBackground);
     this.loadAsset(this.assets.dirtTile, ASSET_PATHS.dirtTile);
     this.loadAsset(this.assets.seedSprite, ASSET_PATHS.seedSprite);
@@ -90,8 +92,8 @@ export class AssetLoader {
   }
 
   private calculateTotalAssets(): void {
-    // Count: player, home, dirt, seed, barren (handled in its loader), plants, buildings
-    const baseCount = 5; // player, home, dirt, seed, barren
+    // Count: player, slash, home, dirt, seed, barren (handled in its loader), plants, buildings
+    const baseCount = 6; // player, slash, home, dirt, seed, barren
     const plantCount = Object.keys(ASSET_PATHS.plantSprites).length;
     const buildingCount = Object.keys(ASSET_PATHS.buildings).length;
     this.totalAssets = baseCount + plantCount + buildingCount;
