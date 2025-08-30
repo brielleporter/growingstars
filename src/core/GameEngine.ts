@@ -397,6 +397,11 @@ export class GameEngine {
       this.harvestingInputHandler();
     }
 
+    // If it's raining outside, water all unwatered seeds automatically
+    if (this.isRainingOutside()) {
+      this.plantManagement.waterAllUnwatered();
+    }
+
     // Update fade transition state
     if (this.fadeTransition.active) {
       const now = performance.now();
@@ -423,6 +428,13 @@ export class GameEngine {
     // Follow camera to player
     const p = this.playerMovement.getPlayerCharacter();
     if (this.camera) this.camera.follow(p.xPosition, p.yPosition);
+  }
+
+  private isRainingOutside(): boolean {
+    try {
+      const w = (window as any).currentWeather;
+      return !this.isInterior && w === 'storm';
+    } catch (_) { return false; }
   }
 
   private updateWorldCollisions(): void {
@@ -907,5 +919,10 @@ export class GameEngine {
         y: this.playerMovement.getPlayerCharacter().yPosition
       }
     };
+  }
+
+  // Expose whether the player is inside the interior scene
+  public isInteriorScene(): boolean {
+    return this.isInterior;
   }
 }

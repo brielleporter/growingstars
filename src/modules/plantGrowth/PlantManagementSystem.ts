@@ -172,6 +172,23 @@ export class PlantManagementSystem {
     return true;
   }
 
+  /** Water all planted seeds that are not yet grown and not yet watered. Returns number watered. */
+  public waterAllUnwatered(startTime?: number): number {
+    const t = startTime ?? performance.now();
+    let count = 0;
+    for (const p of this.plantedEntities) {
+      if (p.hasGrown) continue;
+      if (p.watered) continue;
+      p.watered = true;
+      p.wateringStartTime = t;
+      count++;
+    }
+    if (count > 0) {
+      console.log(`Rain watered ${count} seed(s).`);
+    }
+    return count;
+  }
+
   private plantSeed(position: ClickPosition): void {
     const randomPlantType = this.getRandomPlantType();
     
