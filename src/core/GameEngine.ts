@@ -4,6 +4,7 @@
 
 import { GameAssets } from '../types/gameAssets.types';
 import { SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG, TILE_CONFIG, WORLD_CONFIG, HARVEST_EFFECT_CONFIG, HOUSE_CONFIG, PLANT_PRICES } from '../configuration/gameConstants';
+import type { PlantEntity } from '../types/plantSystem.types';
 import { InventorySystem } from '../modules/inventory/InventorySystem';
 import { PlayerCharacter } from '../types/playerCharacter.types';
 import { AssetLoader } from '../assetManagement/AssetLoader';
@@ -49,7 +50,7 @@ export class GameEngine {
   private isRunning = false;
   private lastTimestamp = 0;
   private harvestingInputHandler?: () => void;
-  private activeEffects: Array<{ x: number; baselineY: number; start: number; kind: 'slash'; row: number; targetHeight: number }>=[];
+  private activeEffects: Array<{ x: number; baselineY: number; start: number; kind: 'slash'; row: number; targetHeight: number; targetPlant?: PlantEntity }>=[];
   private inventory: InventorySystem;
 
   constructor(canvasElementId: string) {
@@ -214,24 +215,22 @@ export class GameEngine {
         if (now - lastHarvestTime > HARVEST_COOLDOWN) {
           const player = this.playerMovement.getPlayerCharacter();
           const target = this.calculatePlantingPosition(player);
-          // Prefer tile-accurate harvest to avoid coordinate drift
+          // Prefer tile-accurate: find plant reference without removing
           const tx = Math.floor(target.x / TILE_CONFIG.tileSize);
           const ty = Math.floor(target.y / TILE_CONFIG.tileSize);
-          let harvested = this.plantManagement.harvestAtTile(tx, ty, TILE_CONFIG.tileSize);
-          if (!harvested) {
-            // fallback to distance check for older plants
-            harvested = this.plantManagement.harvestNearest(target, HARVEST_REACH);
+          let targetPlant: PlantEntity | null = this.plantManagement.findMatureAtTile(tx, ty, TILE_CONFIG.tileSize);
+          if (!targetPlant) {
+            // fallback to distance-based find
+            targetPlant = this.plantManagement.findNearestMature(target, HARVEST_REACH);
           }
-          if (harvested) {
-            // Add to inventory
-            this.inventory.addPlant(harvested.plantType);
+          if (targetPlant) {
             // Spawn slash effect centered on player feet
             const spriteCfg = this.playerRenderer.getSpriteConfiguration();
             const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
             const baselineY = player.yPosition + displayHeight / 2;
             const targetHeight = Math.floor(displayHeight * HARVEST_EFFECT_CONFIG.scale);
             const row = player.currentRow; // up,left,down,right mapping
-            this.activeEffects.push({ x: player.xPosition, baselineY, start: now, kind: 'slash', row, targetHeight });
+            this.activeEffects.push({ x: player.xPosition, baselineY, start: now, kind: 'slash', row, targetHeight, targetPlant });
           }
           lastHarvestTime = now;
         }
@@ -493,7 +492,14 @@ export class GameEngine {
     for (const e of this.activeEffects) {
       const elapsed = (now - e.start) / 1000;
       const frameIndex = Math.floor(elapsed / secPerFrame);
-      if (frameIndex >= columns) continue; // finished
+      if (frameIndex >= columns) {
+        if (e.kind === 'slash' && e.targetPlant) {
+          if (this.plantManagement.removePlant(e.targetPlant)) {
+            this.inventory.addPlant(e.targetPlant.plantType);
+          }
+        }
+        continue; // finished
+      }
       effectsLeft.push(e);
       const col = frameIndex % columns;
       const row = Math.max(0, Math.min(rows - 1, e.row));

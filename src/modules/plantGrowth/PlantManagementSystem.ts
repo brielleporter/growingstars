@@ -109,6 +109,17 @@ export class PlantManagementSystem {
     return best;
   }
 
+  /** Find a mature plant occupying the exact tile (tileX, tileY), without removing it. */
+  public findMatureAtTile(tileX: number, tileY: number, tileSize: number): PlantEntity | null {
+    for (const p of this.plantedEntities) {
+      if (!p.hasGrown) continue;
+      const pxTile = Math.floor(p.xPosition / tileSize);
+      const pyTile = Math.floor(p.yPosition / tileSize);
+      if (pxTile === tileX && pyTile === tileY) return p;
+    }
+    return null;
+  }
+
   /** Remove a specific plant entity by reference. Returns true if removed. */
   public removePlant(plant: PlantEntity): boolean {
     const idx = this.plantedEntities.indexOf(plant);
