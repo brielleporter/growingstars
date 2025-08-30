@@ -3,8 +3,7 @@
  */
 
 import { GameAssets } from '../types/gameAssets.types';
-import { PlantEntity } from '../types/plantSystem.types';
-import { SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG, TILE_CONFIG, WORLD_CONFIG, HOUSE_CONFIG, HARVEST_EFFECT_CONFIG } from '../configuration/gameConstants';
+import { SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG, TILE_CONFIG, WORLD_CONFIG, HARVEST_EFFECT_CONFIG, HOUSE_CONFIG } from '../configuration/gameConstants';
 import { PlayerCharacter } from '../types/playerCharacter.types';
 import { AssetLoader } from '../assetManagement/AssetLoader';
 import { KeyboardInputManager } from '../modules/inputHandling/KeyboardInputManager';
@@ -15,9 +14,9 @@ import { BackgroundRenderer } from '../modules/rendering/BackgroundRenderer';
 import { BuildingRenderer } from '../modules/rendering/BuildingRenderer';
 import { PlantRenderer } from '../modules/rendering/PlantRenderer';
 import { PlayerCharacterRenderer } from '../modules/rendering/PlayerCharacterRenderer';
-import { Camera } from '../modules/rendering/Camera';
 import { MapLoader, LoadedMap } from '../modules/tilemap/MapLoader';
 import { TilemapRenderer } from '../modules/rendering/TilemapRenderer';
+import { Camera } from '../modules/rendering/Camera';
 
 export class GameEngine {
   private canvas: HTMLCanvasElement;
@@ -35,30 +34,19 @@ export class GameEngine {
   private buildingRenderer: BuildingRenderer;
   private plantRenderer: PlantRenderer;
   private playerRenderer: PlayerCharacterRenderer;
-  private camera: Camera;
   private mapLoader: MapLoader;
   private tilemapRenderer: TilemapRenderer;
   private worldMap: LoadedMap | null = null;
+  private camera!: Camera;
+  private centerOrigin = { x: 0, y: 0 };
   private houseWorld = { x: 0, y: 0 };
-  private centerOrigin = { x: 0, y: 0 }; // where the center map chunk starts in world space
-  private interactionAreas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' }> = [];
-  private staticCollisionRects: Array<{ x: number; y: number; w: number; h: number }> = [];
-  
-  private harvestingInputHandler?: () => void;
-  private activeEffects: Array<{
-    x: number;
-    baselineY: number;
-    start: number;
-    kind: 'slash';
-    row: number;
-    targetHeight: number;
-    targetPlant?: PlantEntity;
-  }>=[];
 
   // Game state
   private gameAssets!: GameAssets;
   private isRunning = false;
   private lastTimestamp = 0;
+  private harvestingInputHandler?: () => void;
+  private activeEffects: Array<{ x: number; baselineY: number; start: number; kind: 'slash'; row: number; targetHeight: number }>=[];
 
   constructor(canvasElementId: string) {
     const canvas = document.getElementById(canvasElementId) as HTMLCanvasElement;
@@ -91,32 +79,10 @@ export class GameEngine {
     this.buildingRenderer = new BuildingRenderer(this.renderingContext);
     this.plantRenderer = new PlantRenderer(this.renderingContext);
     this.playerRenderer = new PlayerCharacterRenderer(this.renderingContext);
-    this.camera = new Camera();
-    // Ensure camera knows current viewport immediately
-    this.camera.setViewport(this.canvas.width, this.canvas.height);
     this.mapLoader = new MapLoader();
     this.tilemapRenderer = new TilemapRenderer(this.renderingContext);
-
-    // World/tile setup
-    const worldWidth = WORLD_CONFIG.widthTiles * TILE_CONFIG.tileSize;
-    const worldHeight = WORLD_CONFIG.heightTiles * TILE_CONFIG.tileSize;
-    this.camera.setWorldSize(worldWidth, worldHeight);
-    this.playerMovement.setWorldSize(worldWidth, worldHeight);
-
-    // Initial player placement (world center)
-    this.playerMovement.getPlayerCharacter().xPosition = Math.floor(worldWidth / 2);
-    this.playerMovement.getPlayerCharacter().yPosition = Math.floor(worldHeight / 2);
-    // Center camera on player now (before first frame)
-    this.camera.follow(
-      this.playerMovement.getPlayerCharacter().xPosition,
-      this.playerMovement.getPlayerCharacter().yPosition
-    );
-
-    // House placement at tile (bottom-center)
-    const houseTileX = HOUSE_CONFIG.tileX;
-    const houseTileY = HOUSE_CONFIG.tileY;
-    this.houseWorld.x = Math.floor((houseTileX + 0.5) * TILE_CONFIG.tileSize);
-    this.houseWorld.y = Math.floor((houseTileY + 1) * TILE_CONFIG.tileSize);
+    this.camera = new Camera();
+    this.camera.setViewport(this.canvas.width, this.canvas.height);
   }
 
   private setupViewportCanvas(): void {
@@ -124,7 +90,6 @@ export class GameEngine {
       this.canvas.width = window.innerWidth;
       this.canvas.height = window.innerHeight;
       this.renderingContext.imageSmoothingEnabled = false;
-      if (this.camera) this.camera.setViewport(this.canvas.width, this.canvas.height);
     };
     
     // Set initial size
@@ -140,42 +105,41 @@ export class GameEngine {
     // Load all assets
     this.gameAssets = await this.assetLoader.loadAllAssets();
 
-    // Load world map
-    try {
-      this.worldMap = await this.mapLoader.loadMap('/src/assets/maps/homeMap.tmj');
-      const displayTile = TILE_CONFIG.tileSize;
-      const baseW = this.worldMap.widthTiles * displayTile;
-      const baseH = this.worldMap.heightTiles * displayTile;
-      // Center chunk origin so that there is one chunk on each side
-      this.centerOrigin = { x: baseW, y: baseH };
-      // Expand world to 3x3 grid (we currently draw center + 4 sides; corners remain empty but still within bounds)
-      const worldW = baseW * 3;
-      const worldH = baseH * 3;
-      this.camera.setWorldSize(worldW, worldH);
-      this.playerMovement.setWorldSize(worldW, worldH);
-      // Position player at the center of the center chunk
-      const centerX = this.centerOrigin.x + Math.floor(baseW / 2);
-      const centerY = this.centerOrigin.y + Math.floor(baseH / 2);
-      const player = this.playerMovement.getPlayerCharacter();
-      player.xPosition = centerX;
-      player.yPosition = centerY;
-      this.camera.follow(centerX, centerY);
-      // Shift house position into center chunk space
-      this.houseWorld.x += this.centerOrigin.x;
-      this.houseWorld.y += this.centerOrigin.y;
-      // Build interaction areas and static collisions from interact layers
-      this.buildInteractionAreas();
-      console.log(`Loaded world map: ${this.worldMap.widthTiles}x${this.worldMap.heightTiles} tiles`);
-    } catch (err) {
-      console.warn('Map load failed; using background fallback', err);
-    }
-
     // Initialize input systems
     this.keyboardInput.initialize();
     this.mouseInput.initialize();
 
     // Set up plant placement on P key press
     this.setupPlantingInput();
+    // Set up harvesting on H key press
+    this.setupHarvestingInput();
+
+    // Load world map (Tiled)
+    try {
+      this.worldMap = await this.mapLoader.loadMap('/src/assets/maps/homeMap.tmj');
+      // Compute world/tile sizing and camera
+      const tile = TILE_CONFIG.tileSize;
+      const baseW = this.worldMap.widthTiles * tile;
+      const baseH = this.worldMap.heightTiles * tile;
+      this.centerOrigin = { x: baseW, y: baseH };
+      const worldW = baseW * 3;
+      const worldH = baseH * 3;
+      this.camera.setWorldSize(worldW, worldH);
+      this.playerMovement.setWorldSize(worldW, worldH);
+      // Place player at center of center chunk
+      const p = this.playerMovement.getPlayerCharacter();
+      p.xPosition = this.centerOrigin.x + Math.floor(baseW / 2);
+      p.yPosition = this.centerOrigin.y + Math.floor(baseH / 2);
+      this.camera.follow(p.xPosition, p.yPosition);
+      // House world location inside center chunk
+      const hx = this.centerOrigin.x + Math.floor((HOUSE_CONFIG.tileX + 0.5) * tile);
+      const hy = this.centerOrigin.y + Math.floor((HOUSE_CONFIG.tileY + 1) * tile);
+      this.houseWorld = { x: hx, y: hy };
+      console.log('Loaded Tiled map:', this.worldMap.widthTiles, 'x', this.worldMap.heightTiles);
+    } catch (e) {
+      console.warn('Failed to load Tiled map:', e);
+      this.worldMap = null;
+    }
     // Set up harvesting on H key press
     this.setupHarvestingInput();
 
@@ -232,6 +196,8 @@ export class GameEngine {
     this.plantingInputHandler = plantingHandler;
   }
 
+  
+
   private setupHarvestingInput(): void {
     // Handle H key for harvesting mature plants
     let lastHarvestTime = 0;
@@ -244,16 +210,15 @@ export class GameEngine {
         if (now - lastHarvestTime > HARVEST_COOLDOWN) {
           const player = this.playerMovement.getPlayerCharacter();
           const target = this.calculatePlantingPosition(player);
-          const targetPlant = this.plantManagement.findNearestMature(target, HARVEST_REACH);
-          if (targetPlant) {
-            const p = this.playerMovement.getPlayerCharacter();
-            // Map facing to slash row: up=0, left=1, down=2, right=3
-            const row = p.currentRow; // SPRITE_DIRECTIONS already matches order
+          const harvested = this.plantManagement.harvestNearest(target, HARVEST_REACH);
+          if (harvested) {
+            // Spawn slash effect centered on player feet
             const spriteCfg = this.playerRenderer.getSpriteConfiguration();
             const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
-            const baselineY = p.yPosition + displayHeight / 2;
+            const baselineY = player.yPosition + displayHeight / 2;
             const targetHeight = Math.floor(displayHeight * HARVEST_EFFECT_CONFIG.scale);
-            this.activeEffects.push({ x: p.xPosition, baselineY, start: now, kind: 'slash', row, targetHeight, targetPlant });
+            const row = player.currentRow; // up,left,down,right mapping
+            this.activeEffects.push({ x: player.xPosition, baselineY, start: now, kind: 'slash', row, targetHeight });
           }
           lastHarvestTime = now;
         }
@@ -266,34 +231,46 @@ export class GameEngine {
   private plantingInputHandler?: () => void;
 
   private calculatePlantingPosition(player: PlayerCharacter): { x: number; y: number } {
-    const PLANTING_DISTANCE = 40; // Distance in front of player to plant
-    
-    let offsetX = 0;
-    let offsetY = 0;
-    
-    // Calculate offset based on player's facing direction
+    // Place seed in the adjacent tile next to the player's feet
+    const tile = TILE_CONFIG.tileSize;
+
+    // Determine feet position from player center and sprite display size
+    const spriteCfg = this.playerRenderer.getSpriteConfiguration();
+    const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
+    const feetX = player.xPosition;
+    const feetY = player.yPosition + displayHeight / 2;
+
+    // Current feet tile indices
+    let tx = Math.floor(feetX / tile);
+    let ty = Math.floor(feetY / tile);
+
+    // Move to adjacent tile based on facing direction
     switch (player.currentRow) {
       case SPRITE_DIRECTIONS.up:
-        offsetY = -PLANTING_DISTANCE;
+        ty -= 1;
         break;
       case SPRITE_DIRECTIONS.down:
-        offsetY = PLANTING_DISTANCE;
+        ty += 1;
         break;
       case SPRITE_DIRECTIONS.left:
-        offsetX = -PLANTING_DISTANCE;
+        tx -= 1;
         break;
       case SPRITE_DIRECTIONS.right:
-        offsetX = PLANTING_DISTANCE;
+        tx += 1;
         break;
       default:
-        // Default to planting in front (down)
-        offsetY = PLANTING_DISTANCE;
+        ty += 1; // default forward
         break;
     }
-    
+
+    // Clamp to world tile bounds
+    tx = Math.max(0, Math.min(WORLD_CONFIG.widthTiles - 1, tx));
+    ty = Math.max(0, Math.min(WORLD_CONFIG.heightTiles - 1, ty));
+
+    // Return the world position at the center of that tile
     return {
-      x: player.xPosition + offsetX,
-      y: player.yPosition + offsetY
+      x: (tx + 0.5) * tile,
+      y: (ty + 0.5) * tile,
     };
   }
 
@@ -336,13 +313,13 @@ export class GameEngine {
     if (this.plantingInputHandler) {
       this.plantingInputHandler();
     }
+    // Handle harvesting input
     if (this.harvestingInputHandler) {
       this.harvestingInputHandler();
     }
-
-    // Handle interactions (e.g., well/ship)
-    if (this.keyboardInput.isKeyPressed('e')) {
-      this.handleInteractions();
+    // Handle harvesting input
+    if (this.harvestingInputHandler) {
+      this.harvestingInputHandler();
     }
 
 
@@ -352,179 +329,60 @@ export class GameEngine {
     // Update game systems
     this.playerMovement.updatePlayerMovement(deltaTimeSeconds);
     this.plantManagement.updatePlantGrowth();
-    // Camera follow
+    // Follow camera to player
     const p = this.playerMovement.getPlayerCharacter();
-    this.camera.follow(p.xPosition, p.yPosition);
+    if (this.camera) this.camera.follow(p.xPosition, p.yPosition);
   }
 
   private updateWorldCollisions(): void {
     const base = this.gameAssets.buildings?.playerHouseBase;
     if (!base || !base.complete || base.naturalWidth === 0) {
-      this.playerMovement.setCollisionRects(this.staticCollisionRects);
+      this.playerMovement.setCollisionRects([]);
       return;
     }
     const dw = base.naturalWidth;
     const dh = base.naturalHeight;
-    const dx = Math.floor(this.houseWorld.x - dw / 2);
+    const dx = Math.floor(this.houseWorld.x - Math.floor(dw / 2));
     const dy = Math.floor(this.houseWorld.y - dh);
     // Tight collision crop (222x100 at 1x), anchored to bottom-center
     const cropW = RENDER_CONFIG.playerHouseCollisionSize.width;
     const cropH = RENDER_CONFIG.playerHouseCollisionSize.height;
     const cx = Math.floor((dx + dw / 2) - cropW / 2);
     const cy = Math.floor(dy + dh - cropH);
-    const combined = [...this.staticCollisionRects, { x: cx, y: cy, w: cropW, h: cropH }];
-    this.playerMovement.setCollisionRects(combined);
-  }
-
-  private buildInteractionAreas(): void {
-    if (!this.worldMap) return;
-    const tile = TILE_CONFIG.tileSize;
-    const centerX = this.centerOrigin.x;
-    const centerY = this.centerOrigin.y;
-    const areas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' }> = [];
-
-    const collect = (layerName: string, kind: 'well' | 'ship') => {
-      const layer = this.worldMap!.layers.find(l => l.name === layerName);
-      if (!layer) return;
-      const w = layer.width;
-      const h = layer.height;
-      for (let ty = 0; ty < h; ty++) {
-        for (let tx = 0; tx < w; tx++) {
-          const gid = layer.data[ty * w + tx] | 0;
-          if (gid) {
-            const x = centerX + tx * tile;
-            const y = centerY + ty * tile;
-            areas.push({ x, y, w: tile, h: tile, kind });
-          }
-        }
-      }
-    };
-
-    collect('interactWell', 'well');
-    collect('interactShip', 'ship');
-
-    this.interactionAreas = areas;
-    this.staticCollisionRects = areas.map(a => ({ x: a.x, y: a.y, w: a.w, h: a.h }));
-  }
-
-  private handleInteractions(): void {
-    // Check if player's feet overlap any interaction area
-    const player = this.playerMovement.getPlayerCharacter();
-    const spriteCfg = this.playerRenderer.getSpriteConfiguration();
-    const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
-    const feetX = player.xPosition;
-    const feetY = player.yPosition + displayHeight / 2;
-    const pointRect = { x: feetX - 2, y: feetY - 2, w: 4, h: 4 };
-
-    const overlap = this.interactionAreas.find(a => this.rectsOverlap(pointRect, a));
-    if (overlap) {
-      if (overlap.kind === 'well') {
-        console.log('Interact: Well — TODO fill watering can');
-      } else if (overlap.kind === 'ship') {
-        console.log('Interact: Ship — TODO ship crops for money');
-      }
-    }
-  }
-
-  private rectsOverlap(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean {
-    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    this.playerMovement.setCollisionRects([{ x: cx, y: cy, w: cropW, h: cropH }]);
   }
 
   private renderFrame(): void {
     // Clear canvas
     this.renderingContext.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Render tilemap or fallback background
+    // Render Tiled map if available; otherwise background
     if (this.worldMap) {
-      // Base dimensions
       const tile = TILE_CONFIG.tileSize;
       const chunkW = this.worldMap.widthTiles * tile;
       const chunkH = this.worldMap.heightTiles * tile;
-
-      // Center chunk at centerOrigin
-      this.tilemapRenderer.render(
-        this.worldMap,
-        { x: this.camera.x, y: this.camera.y },
-        { x: this.centerOrigin.x, y: this.centerOrigin.y }
-      );
-
-      // Four neighbors (top, bottom, left, right) with base + randomized details
-      const neighborLayers = ['baseGround', 'detailsGround'];
-      const neighborVariation = { randomizedLayers: { detailsGround: { density: 0.7, flipHChance: 0.4, rotate90Chance: 0.2, rotate180Chance: 0.15, jitterPx: 1 } }, seed: 4242 };
-      this.tilemapRenderer.renderFilteredWithVariation(
-        this.worldMap,
-        neighborLayers,
-        neighborVariation,
-        { x: this.camera.x, y: this.camera.y },
-        { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y }
-      ); // left
-      this.tilemapRenderer.renderFilteredWithVariation(
-        this.worldMap,
-        neighborLayers,
-        neighborVariation,
-        { x: this.camera.x, y: this.camera.y },
-        { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y }
-      ); // right
-      this.tilemapRenderer.renderFilteredWithVariation(
-        this.worldMap,
-        neighborLayers,
-        neighborVariation,
-        { x: this.camera.x, y: this.camera.y },
-        { x: this.centerOrigin.x, y: this.centerOrigin.y - chunkH }
-      ); // top
-      this.tilemapRenderer.renderFilteredWithVariation(
-        this.worldMap,
-        neighborLayers,
-        neighborVariation,
-        { x: this.camera.x, y: this.camera.y },
-        { x: this.centerOrigin.x, y: this.centerOrigin.y + chunkH }
-      ); // bottom
-
-      // Corners with decoration variation: draw base + randomized detailsGround
-      const cornerLayers = ['baseGround', 'detailsGround'];
-      const variation = { randomizedLayers: { detailsGround: { density: 0.6, flipHChance: 0.5 } }, seed: 1337 };
-      this.tilemapRenderer.renderFilteredWithVariation(
-        this.worldMap,
-        cornerLayers,
-        variation,
-        { x: this.camera.x, y: this.camera.y },
-        { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y - chunkH }
-      ); // top-left
-      this.tilemapRenderer.renderFilteredWithVariation(
-        this.worldMap,
-        cornerLayers,
-        variation,
-        { x: this.camera.x, y: this.camera.y },
-        { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y - chunkH }
-      ); // top-right
-      this.tilemapRenderer.renderFilteredWithVariation(
-        this.worldMap,
-        cornerLayers,
-        variation,
-        { x: this.camera.x, y: this.camera.y },
-        { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y + chunkH }
-      ); // bottom-left
-      this.tilemapRenderer.renderFilteredWithVariation(
-        this.worldMap,
-        cornerLayers,
-        variation,
-        { x: this.camera.x, y: this.camera.y },
-        { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y + chunkH }
-      ); // bottom-right
+      // Center map
+      this.tilemapRenderer.render(this.worldMap, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x, y: this.centerOrigin.y });
+      // Four neighbors: base + details
+      const layers = ['baseGround', 'detailsGround'];
+      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y });
+      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y });
+      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x, y: this.centerOrigin.y - chunkH });
+      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x, y: this.centerOrigin.y + chunkH });
+      // Corners
+      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y - chunkH });
+      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y - chunkH });
+      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y + chunkH });
+      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y + chunkH });
     } else {
       this.backgroundRenderer.renderBackground(
         this.gameAssets,
-        this.assetLoader.isBarrenAvailable(),
-        { x: this.camera.x, y: this.camera.y }
+        this.assetLoader.isBarrenAvailable()
       );
     }
 
     // Render building bases (below player)
-    this.buildingRenderer.renderBuildingBases(
-      this.gameAssets,
-      { x: this.camera.x, y: this.camera.y },
-      this.houseWorld
-    );
+    this.buildingRenderer.renderBuildingBases(this.gameAssets, { x: this.camera.x, y: this.camera.y }, this.houseWorld);
 
     // Render plants
     this.plantRenderer.renderAllPlants(
@@ -533,7 +391,7 @@ export class GameEngine {
       { x: this.camera.x, y: this.camera.y }
     );
 
-    // Render player character unless a slash effect is replacing idle
+    // Render player character unless slash is replacing idle
     const playerForRender = this.playerMovement.getPlayerCharacter();
     const replaceIdleWithSlash = !playerForRender.isMoving && this.hasActiveSlashEffect();
     if (!replaceIdleWithSlash) {
@@ -544,56 +402,40 @@ export class GameEngine {
       );
     }
 
-    // Render transient effects above player (e.g., slash)
+    // Render effects (slash) above player
     this.renderEffects();
 
     // Render building roofs (above player)
-    this.buildingRenderer.renderBuildingRoofs(
-      this.gameAssets,
-      { x: this.camera.x, y: this.camera.y },
-      this.houseWorld
-    );
+    this.buildingRenderer.renderBuildingRoofs(this.gameAssets, { x: this.camera.x, y: this.camera.y }, this.houseWorld);
   }
 
   private renderEffects(): void {
     const now = performance.now();
     const ctx = this.renderingContext;
     const img = this.gameAssets.harvestSlashSprite;
-    if (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) {
+    if (!img || !img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) {
       this.activeEffects = [];
       return;
     }
     const { columns, rows, framesPerSecond } = HARVEST_EFFECT_CONFIG;
-    const totalFrames = columns; // per-row animation length
+    const secPerFrame = 1 / framesPerSecond;
     const frameW = Math.floor(img.naturalWidth / columns);
     const frameH = Math.floor(img.naturalHeight / rows);
-    const secPerFrame = 1 / framesPerSecond;
 
     const effectsLeft: typeof this.activeEffects = [];
     for (const e of this.activeEffects) {
-      // Compute frame by elapsed time
       const elapsed = (now - e.start) / 1000;
       const frameIndex = Math.floor(elapsed / secPerFrame);
-      if (frameIndex >= totalFrames) {
-        // Effect finished; if tied to a plant, remove it now
-        if (e.kind === 'slash' && e.targetPlant) {
-          this.plantManagement.removePlant(e.targetPlant);
-        }
-        continue; // done
-      }
+      if (frameIndex >= columns) continue; // finished
       effectsLeft.push(e);
-
       const col = frameIndex % columns;
       const row = Math.max(0, Math.min(rows - 1, e.row));
       const sx = col * frameW;
       const sy = row * frameH;
       const dh = Math.max(1, Math.floor(e.targetHeight));
       const dw = Math.max(1, Math.floor((frameW / frameH) * dh));
-
       ctx.save();
-      ctx.translate(-this.camera.x, -this.camera.y);
       ctx.globalAlpha = 0.95;
-      // Bottom-center align to player's baseline (feet)
       ctx.drawImage(
         img,
         sx, sy, frameW, frameH,
