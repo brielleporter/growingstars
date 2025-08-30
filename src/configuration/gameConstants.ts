@@ -68,7 +68,7 @@ export const WORLD_PIXEL_SIZE = {
 // House placement (tile grid)
 export const HOUSE_CONFIG = {
   /** House base X tile index */
-  tileX: 19,
+  tileX: 16,
   /** House base Y tile index; moved 3 tiles up from prior */
   tileY: 8,
 } as const;
