@@ -39,7 +39,7 @@ export class GameEngine {
   private mapLoader: MapLoader;
   private tilemapRenderer: TilemapRenderer;
   private worldMap: LoadedMap | null = null;
-  private interactionAreas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' }>=[];
+  private interactionAreas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' }>=[];
   private staticCollisionRects: Array<{ x: number; y: number; w: number; h: number }>=[];
   private camera!: Camera;
   private centerOrigin = { x: 0, y: 0 };
@@ -453,8 +453,8 @@ export class GameEngine {
     if (!this.worldMap) return;
     const tile = TILE_CONFIG.tileSize;
     const baseLayerOffset = { x: this.centerOrigin.x, y: this.centerOrigin.y };
-    const areas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' }> = [];
-    const addFromLayer = (name: string, kind: 'well' | 'ship') => {
+    const areas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' }> = [];
+    const addFromLayer = (name: string, kind: 'well' | 'ship' | 'bed') => {
       const layer = this.worldMap!.layers.find(l => l.name === name);
       if (!layer) return;
       const w = layer.width, h = layer.height;
@@ -468,6 +468,9 @@ export class GameEngine {
     };
     addFromLayer('interactWell', 'well');
     addFromLayer('interactShip', 'ship');
+    if (this.isInterior) {
+      addFromLayer('interactBed', 'bed');
+    }
     if (!this.isInterior) {
       // Add house door interaction in front of the house base (approximate center tile)
       const doorX = Math.floor(this.houseWorld.x - tile / 2);
@@ -495,6 +498,8 @@ export class GameEngine {
       this.enterHouse();
     } else if (near.kind === 'exitHouse') {
       this.exitHouse();
+    } else if (near.kind === 'bed') {
+      this.sleepAtBed();
     } else if (near.kind === 'ship') {
       const { items, coins } = this.computeSalePreview();
       if (items <= 0 || coins <= 0) {
@@ -754,6 +759,7 @@ export class GameEngine {
     }
     if (near.kind === 'enterHouse') return 'Press E to enter house';
     if (near.kind === 'exitHouse') return 'Press E to exit house';
+    if (near.kind === 'bed') return 'Press E to sleep';
     if (near.kind === 'ship') {
       const { items, coins } = this.computeSalePreview();
       if (items > 0) return `Press E to ship ${items} for ${coins} coins`;
@@ -764,7 +770,7 @@ export class GameEngine {
     return null;
   }
 
-  private getFeetAdjacentInteraction(): { kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' } | null {
+  private getFeetAdjacentInteraction(): { kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' } | null {
     const player = this.playerMovement.getPlayerCharacter();
     const spriteCfg = this.playerRenderer.getSpriteConfiguration();
     if (!spriteCfg.frameHeight) return null;
@@ -882,6 +888,13 @@ export class GameEngine {
     }
     this.staticCollisionRects = rects;
     this.playerMovement.setCollisionRects(this.staticCollisionRects);
+  }
+
+  private sleepAtBed(): void {
+    // Simple fade and notification for now
+    this.startFadeTransition(() => {
+      this.pushNotification('You feel rested');
+    }, 800);
   }
 
   private computeSalePreview(): { items: number; coins: number } {
