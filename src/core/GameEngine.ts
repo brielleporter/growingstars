@@ -116,9 +116,6 @@ export class GameEngine {
 
     // Set up plant placement on P key press
     this.setupPlantingInput();
-    // Set up harvesting on H key press
-    this.setupHarvestingInput();
-
     // Load world map (Tiled)
     try {
       this.worldMap = await this.mapLoader.loadMap('/src/assets/maps/homeMap.tmj');
@@ -209,7 +206,7 @@ export class GameEngine {
     // Handle H key for harvesting mature plants
     let lastHarvestTime = 0;
     const HARVEST_COOLDOWN = 350; // ms between harvests
-    const HARVEST_REACH = TILE_CONFIG.tileSize * 0.9;
+    const HARVEST_REACH = TILE_CONFIG.tileSize * 1.25;
 
     const harvestHandler = () => {
       if (this.keyboardInput.isKeyPressed('h')) {
@@ -217,7 +214,14 @@ export class GameEngine {
         if (now - lastHarvestTime > HARVEST_COOLDOWN) {
           const player = this.playerMovement.getPlayerCharacter();
           const target = this.calculatePlantingPosition(player);
-          const harvested = this.plantManagement.harvestNearest(target, HARVEST_REACH);
+          // Prefer tile-accurate harvest to avoid coordinate drift
+          const tx = Math.floor(target.x / TILE_CONFIG.tileSize);
+          const ty = Math.floor(target.y / TILE_CONFIG.tileSize);
+          let harvested = this.plantManagement.harvestAtTile(tx, ty, TILE_CONFIG.tileSize);
+          if (!harvested) {
+            // fallback to distance check for older plants
+            harvested = this.plantManagement.harvestNearest(target, HARVEST_REACH);
+          }
           if (harvested) {
             // Add to inventory
             this.inventory.addPlant(harvested.plantType);
@@ -325,10 +329,6 @@ export class GameEngine {
     // Handle interactions (E key)
     if (this.keyboardInput.isKeyPressed('e')) {
       this.handleInteractions();
-    }
-    // Handle harvesting input
-    if (this.harvestingInputHandler) {
-      this.harvestingInputHandler();
     }
     // Handle harvesting input
     if (this.harvestingInputHandler) {
@@ -502,6 +502,8 @@ export class GameEngine {
       const dh = Math.max(1, Math.floor(e.targetHeight));
       const dw = Math.max(1, Math.floor((frameW / frameH) * dh));
       ctx.save();
+      // Camera-aware: draw in world space
+      ctx.translate(-this.camera.x, -this.camera.y);
       ctx.globalAlpha = 0.95;
       ctx.drawImage(
         img,

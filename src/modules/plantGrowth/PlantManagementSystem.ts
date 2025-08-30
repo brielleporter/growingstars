@@ -75,6 +75,22 @@ export class PlantManagementSystem {
     return null;
   }
 
+  /** Harvest a mature plant that occupies the exact tile (tileX, tileY). Returns the harvested plant or null. */
+  public harvestAtTile(tileX: number, tileY: number, tileSize: number): PlantEntity | null {
+    const idx = this.plantedEntities.findIndex(p => {
+      if (!p.hasGrown) return false;
+      const pxTile = Math.floor(p.xPosition / tileSize);
+      const pyTile = Math.floor(p.yPosition / tileSize);
+      return pxTile === tileX && pyTile === tileY;
+    });
+    if (idx >= 0) {
+      const harvested = this.plantedEntities.splice(idx, 1)[0];
+      console.log(`Harvested ${harvested.plantType} at tile (${tileX}, ${tileY})`);
+      return harvested;
+    }
+    return null;
+  }
+
   /** Find nearest mature plant within maxDistance of position, without removing it. */
   public findNearestMature(position: { x: number; y: number }, maxDistance: number): PlantEntity | null {
     let best: PlantEntity | null = null;
