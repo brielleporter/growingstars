@@ -39,11 +39,13 @@ export class GameEngine {
   private mapLoader: MapLoader;
   private tilemapRenderer: TilemapRenderer;
   private worldMap: LoadedMap | null = null;
-  private interactionAreas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' }>=[];
+  private interactionAreas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' }>=[];
   private staticCollisionRects: Array<{ x: number; y: number; w: number; h: number }>=[];
   private camera!: Camera;
   private centerOrigin = { x: 0, y: 0 };
   private houseWorld = { x: 0, y: 0 };
+  private isInterior = false;
+  private fadeTransition: { active: boolean; start: number; duration: number; midFired: boolean; onMid?: () => Promise<void> | void } = { active: false, start: 0, duration: 600, midFired: false };
 
   // Game state
   private gameAssets!: GameAssets;
@@ -395,6 +397,22 @@ export class GameEngine {
       this.harvestingInputHandler();
     }
 
+    // Update fade transition state
+    if (this.fadeTransition.active) {
+      const now = performance.now();
+      const t = now - this.fadeTransition.start;
+      if (!this.fadeTransition.midFired && t >= this.fadeTransition.duration / 2) {
+        this.fadeTransition.midFired = true;
+        // Switch maps at midpoint
+        const fn = this.fadeTransition.onMid;
+        if (fn) Promise.resolve(fn()).catch(err => console.error('Transition mid callback failed', err));
+      }
+      if (t >= this.fadeTransition.duration) {
+        this.fadeTransition.active = false;
+        this.fadeTransition.onMid = undefined;
+      }
+    }
+
 
     // Update collisions (house base as a blocking rect)
     this.updateWorldCollisions();
@@ -408,6 +426,11 @@ export class GameEngine {
   }
 
   private updateWorldCollisions(): void {
+    if (this.isInterior) {
+      // In interior scene, use only static collisions (none by default)
+      this.playerMovement.setCollisionRects(this.staticCollisionRects);
+      return;
+    }
     const base = this.gameAssets.buildings?.playerHouseBase;
     if (!base || !base.complete || base.naturalWidth === 0) {
       this.playerMovement.setCollisionRects(this.staticCollisionRects);
@@ -430,7 +453,7 @@ export class GameEngine {
     if (!this.worldMap) return;
     const tile = TILE_CONFIG.tileSize;
     const baseLayerOffset = { x: this.centerOrigin.x, y: this.centerOrigin.y };
-    const areas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' }> = [];
+    const areas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' }> = [];
     const addFromLayer = (name: string, kind: 'well' | 'ship') => {
       const layer = this.worldMap!.layers.find(l => l.name === name);
       if (!layer) return;
@@ -445,15 +468,34 @@ export class GameEngine {
     };
     addFromLayer('interactWell', 'well');
     addFromLayer('interactShip', 'ship');
+    if (!this.isInterior) {
+      // Add house door interaction in front of the house base (approximate center tile)
+      const doorX = Math.floor(this.houseWorld.x - tile / 2);
+      const doorY = Math.floor(this.houseWorld.y - tile);
+      areas.push({ x: doorX, y: doorY, w: tile, h: tile, kind: 'enterHouse' });
+    }
+    if (this.isInterior && this.worldMap) {
+      // Exit interaction at Tiled tile (1,6)
+      const originX = (this.worldMap as any).originX ?? 0;
+      const originY = (this.worldMap as any).originY ?? 0;
+      const exitTileX = Math.max(0, Math.min(this.worldMap.widthTiles - 1, 1 - originX));
+      const exitTileY = Math.max(0, Math.min(this.worldMap.heightTiles - 1, 6 - originY));
+      const exitX = exitTileX * tile;
+      const exitY = exitTileY * tile;
+      areas.push({ x: exitX, y: exitY, w: tile, h: tile, kind: 'exitHouse' });
+    }
     this.interactionAreas = areas;
-    // Make them collidable by default
-    this.staticCollisionRects = areas.map(a => ({ x: a.x, y: a.y, w: a.w, h: a.h }));
+    // Leave collisions to world/house geometry; interactions are not collidable
   }
 
   private handleInteractions(): void {
     const near = this.getFeetAdjacentInteraction();
     if (!near) return;
-    if (near.kind === 'ship') {
+    if (near.kind === 'enterHouse') {
+      this.enterHouse();
+    } else if (near.kind === 'exitHouse') {
+      this.exitHouse();
+    } else if (near.kind === 'ship') {
       const { items, coins } = this.computeSalePreview();
       if (items <= 0 || coins <= 0) {
         this.pushNotification('Nothing to ship');
@@ -483,19 +525,21 @@ export class GameEngine {
       const tile = TILE_CONFIG.tileSize;
       const chunkW = this.worldMap.widthTiles * tile;
       const chunkH = this.worldMap.heightTiles * tile;
-      // Center map
+      // Base map
       this.tilemapRenderer.render(this.worldMap, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x, y: this.centerOrigin.y });
-      // Four neighbors: base + details
-      const layers = ['baseGround', 'detailsGround'];
-      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y });
-      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y });
-      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x, y: this.centerOrigin.y - chunkH });
-      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x, y: this.centerOrigin.y + chunkH });
-      // Corners
-      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y - chunkH });
-      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y - chunkH });
-      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y + chunkH });
-      this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y + chunkH });
+      if (!this.isInterior) {
+        // Exterior world repeats surrounding chunks for endless feel
+        const layers = ['baseGround', 'detailsGround'];
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x, y: this.centerOrigin.y - chunkH });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x, y: this.centerOrigin.y + chunkH });
+        // Corners
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y - chunkH });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y - chunkH });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y + chunkH });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y + chunkH });
+      }
     } else {
       this.backgroundRenderer.renderBackground(
         this.gameAssets,
@@ -503,8 +547,10 @@ export class GameEngine {
       );
     }
 
-    // Render building bases (below player)
-    this.buildingRenderer.renderBuildingBases(this.gameAssets, { x: this.camera.x, y: this.camera.y }, this.houseWorld);
+    // Render building bases (below player) only in exterior
+    if (!this.isInterior) {
+      this.buildingRenderer.renderBuildingBases(this.gameAssets, { x: this.camera.x, y: this.camera.y }, this.houseWorld);
+    }
 
     // Render plants
     this.plantRenderer.renderAllPlants(
@@ -527,8 +573,10 @@ export class GameEngine {
     // Render effects (slash) above player
     this.renderEffects();
 
-    // Render building roofs (above player)
-    this.buildingRenderer.renderBuildingRoofs(this.gameAssets, { x: this.camera.x, y: this.camera.y }, this.houseWorld);
+    // Render building roofs (above player) only in exterior
+    if (!this.isInterior) {
+      this.buildingRenderer.renderBuildingRoofs(this.gameAssets, { x: this.camera.x, y: this.camera.y }, this.houseWorld);
+    }
 
     // HUD and prompts (screen-space)
     this.renderHUD();
@@ -669,7 +717,7 @@ export class GameEngine {
       'P: Plant seed',
       'Q: Water (start growth)',
       'H: Harvest (final stage)',
-      'E: Interact (Ship/Well)',
+      'E: Interact (Ship/Well/House)',
       'B: Toggle background',
     ];
     const cw = 220;
@@ -683,6 +731,18 @@ export class GameEngine {
     ctx.font = '12px monospace';
     ctrl.forEach((t, i) => ctx.fillText(t, canvas.width - cw - 10 + padding, 10 + padding + (i + 1) * lineH - 4));
     ctx.restore();
+
+    // Fade overlay (last)
+    if (this.fadeTransition.active) {
+      const now = performance.now();
+      const t = Math.max(0, Math.min(1, (now - this.fadeTransition.start) / this.fadeTransition.duration));
+      const alpha = t < 0.5 ? (t / 0.5) : (1 - (t - 0.5) / 0.5);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.restore();
+    }
   }
 
   private getInteractionPrompt(): string | null {
@@ -692,6 +752,8 @@ export class GameEngine {
       this.suppressEmptyShipPrompt = false;
       return null;
     }
+    if (near.kind === 'enterHouse') return 'Press E to enter house';
+    if (near.kind === 'exitHouse') return 'Press E to exit house';
     if (near.kind === 'ship') {
       const { items, coins } = this.computeSalePreview();
       if (items > 0) return `Press E to ship ${items} for ${coins} coins`;
@@ -702,7 +764,7 @@ export class GameEngine {
     return null;
   }
 
-  private getFeetAdjacentInteraction(): { kind: 'well' | 'ship' } | null {
+  private getFeetAdjacentInteraction(): { kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' } | null {
     const player = this.playerMovement.getPlayerCharacter();
     const spriteCfg = this.playerRenderer.getSpriteConfiguration();
     if (!spriteCfg.frameHeight) return null;
@@ -717,11 +779,109 @@ export class GameEngine {
       const ax = Math.floor(a.x / tile);
       const ay = Math.floor(a.y / tile);
       const manhattan = Math.abs(ftX - ax) + Math.abs(ftY - ay);
-      if (manhattan <= 1) {
-        return { kind: a.kind };
-      }
+      if (manhattan <= 1) { return { kind: a.kind as any }; }
     }
     return null;
+  }
+
+  private async enterHouse(): Promise<void> {
+    this.startFadeTransition(async () => {
+      try {
+        const interior = await this.mapLoader.loadMap('/src/assets/maps/Interior1.tmx');
+        this.worldMap = interior;
+        this.isInterior = true;
+        // Reset camera/world to interior extents
+        const tile = TILE_CONFIG.tileSize;
+        const worldW = interior.widthTiles * tile;
+        const worldH = interior.heightTiles * tile;
+        this.centerOrigin = { x: 0, y: 0 }; // interior drawn at world origin
+        this.camera.setWorldSize(worldW, worldH);
+        this.playerMovement.setWorldSize(worldW, worldH);
+        // Spawn at door inside. Current spawn reported is too far bottom-right.
+        // Adjust by moving 8 tiles left and 7 tiles up from the previous spot.
+        // Spawn using Tiled tile coordinates (hover shows `1,5`).
+        // Our stitched arrays start at (originX, originY) in Tiled's global tile space.
+        const originX = (interior as any).originX ?? 0;
+        const originY = (interior as any).originY ?? 0;
+        // Spawn at Tiled tile (1,4)
+        let spawnTileX = 1 - originX;
+        let spawnTileY = 4 - originY;
+        // Clamp within map
+        spawnTileX = Math.max(0, Math.min(interior.widthTiles - 1, spawnTileX));
+        spawnTileY = Math.max(0, Math.min(interior.heightTiles - 1, spawnTileY));
+        const p = this.playerMovement.getPlayerCharacter();
+        p.xPosition = Math.floor((spawnTileX + 0.5) * tile);
+        p.yPosition = Math.floor((spawnTileY + 0.5) * tile);
+        this.camera.follow(p.xPosition, p.yPosition);
+        // Interactions and collisions inside
+        this.buildInteractionAreas();
+        this.buildInteriorCollisions();
+        this.updateWorldCollisions();
+        this.pushNotification('Entered house');
+      } catch (e) {
+        console.error('Failed to load interior map', e);
+        this.pushNotification('Failed to enter house');
+      }
+    });
+  }
+
+  private async exitHouse(): Promise<void> {
+    this.startFadeTransition(async () => {
+      try {
+        const exterior = await this.mapLoader.loadMap('/src/assets/maps/homeMap.tmj');
+        this.worldMap = exterior;
+        this.isInterior = false;
+        const tile = TILE_CONFIG.tileSize;
+        const baseW = exterior.widthTiles * tile;
+        const baseH = exterior.heightTiles * tile;
+        this.centerOrigin = { x: baseW, y: baseH };
+        const worldW = baseW * 3;
+        const worldH = baseH * 3;
+        this.camera.setWorldSize(worldW, worldH);
+        this.playerMovement.setWorldSize(worldW, worldH);
+        // Place player outside the door, just below the house
+        const p = this.playerMovement.getPlayerCharacter();
+        const outX = this.centerOrigin.x + Math.floor((HOUSE_CONFIG.tileX + 0.5) * tile);
+        const outY = this.centerOrigin.y + Math.floor((HOUSE_CONFIG.tileY + 2) * tile);
+        p.xPosition = outX;
+        p.yPosition = outY;
+        this.camera.follow(p.xPosition, p.yPosition);
+        // Recompute house world and interactions
+        this.houseWorld = { x: this.centerOrigin.x + Math.floor((HOUSE_CONFIG.tileX + 0.5) * tile), y: this.centerOrigin.y + Math.floor((HOUSE_CONFIG.tileY + 1) * tile) };
+        this.buildInteractionAreas();
+        this.updateWorldCollisions();
+        this.pushNotification('Exited house');
+      } catch (e) {
+        console.error('Failed to load exterior map', e);
+        this.pushNotification('Failed to exit house');
+      }
+    });
+  }
+
+  private startFadeTransition(onMid: () => Promise<void> | void, durationMs = 600): void {
+    this.fadeTransition = { active: true, start: performance.now(), duration: durationMs, midFired: false, onMid };
+  }
+
+  private buildInteriorCollisions(): void {
+    if (!this.worldMap) return;
+    // Rule: any tile that is NOT in the 'Floor' layer is non-walkable.
+    const floor = this.worldMap.layers.find(l => l.name.toLowerCase() === 'floor');
+    const tile = TILE_CONFIG.tileSize;
+    const rects: Array<{ x: number; y: number; w: number; h: number }> = [];
+    if (floor) {
+      const w = floor.width, h = floor.height;
+      for (let ty = 0; ty < h; ty++) {
+        for (let tx = 0; tx < w; tx++) {
+          const idx = ty * w + tx;
+          const isFloor = (floor.data[idx] | 0) !== 0;
+          if (!isFloor) {
+            rects.push({ x: tx * tile, y: ty * tile, w: tile, h: tile });
+          }
+        }
+      }
+    }
+    this.staticCollisionRects = rects;
+    this.playerMovement.setCollisionRects(this.staticCollisionRects);
   }
 
   private computeSalePreview(): { items: number; coins: number } {
