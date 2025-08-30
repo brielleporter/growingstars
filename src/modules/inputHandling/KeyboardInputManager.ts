@@ -6,7 +6,8 @@ export class KeyboardInputManager {
   private pressedKeys = new Set<string>();
   private validKeys = [
     'w', 'a', 's', 'd', 'p', 'b', 'e', 'h', 'q',
-    '1', '2', '3', '4'
+    '1', '2', '3', '4',
+    'arrowleft', 'arrowright', ' ', 'space'
   ];
   private boundDown?: (e: KeyboardEvent) => void;
   private boundUp?: (e: KeyboardEvent) => void;
@@ -32,7 +33,9 @@ export class KeyboardInputManager {
   }
 
   private handleKeyDown(event: KeyboardEvent): void {
-    const keyPressed = event.key.toLowerCase();
+    let keyPressed = event.key.toLowerCase();
+    if (keyPressed === ' ') keyPressed = ' ';
+    if (keyPressed === 'spacebar' || keyPressed === 'space') keyPressed = ' ';
     
     if (this.validKeys.includes(keyPressed)) {
       this.pressedKeys.add(keyPressed);
@@ -41,6 +44,9 @@ export class KeyboardInputManager {
   }
 
   private handleKeyUp(event: KeyboardEvent): void {
-    this.pressedKeys.delete(event.key.toLowerCase());
+    let keyUp = event.key.toLowerCase();
+    if (keyUp === ' ') keyUp = ' ';
+    if (keyUp === 'spacebar' || keyUp === 'space') keyUp = ' ';
+    this.pressedKeys.delete(keyUp);
   }
 }

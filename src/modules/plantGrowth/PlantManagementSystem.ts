@@ -30,7 +30,7 @@ export class PlantManagementSystem {
     });
   }
 
-  public handlePlantingClick(clickPosition: ClickPosition): void {
+  public handlePlantingClick(clickPosition: ClickPosition, plantTypeOverride?: PlantType): boolean {
     // Check if there's already a plant nearby
     const existingPlantNearby = this.plantedEntities.find(plant =>
       Math.abs(plant.xPosition - clickPosition.x) < PLANT_CONFIG.spacingThreshold &&
@@ -38,8 +38,10 @@ export class PlantManagementSystem {
     );
 
     if (!existingPlantNearby) {
-      this.plantSeed(clickPosition);
+      this.plantSeed(clickPosition, plantTypeOverride);
+      return true;
     }
+    return false;
   }
 
   public getPlantCount(): { total: number; seeds: number; mature: number } {
@@ -189,8 +191,8 @@ export class PlantManagementSystem {
     return count;
   }
 
-  private plantSeed(position: ClickPosition): void {
-    const randomPlantType = this.getRandomPlantType();
+  private plantSeed(position: ClickPosition, plantTypeOverride?: PlantType): void {
+    const randomPlantType = plantTypeOverride ?? this.getRandomPlantType();
     
     const newPlant: PlantEntity = {
       xPosition: position.x,

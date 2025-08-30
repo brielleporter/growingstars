@@ -58,6 +58,15 @@ export class GameEngine {
   private suppressEmptyShipPrompt = false;
   private wasQPressed = false;
   private inventory: InventorySystem;
+  // Simple demo data for HUD seeds (since seeds are not yet an inventory item)
+  private hudSeedType: string = 'sprout';
+  private hudSeedCount: number = 12;
+  // Bottom inventory bar
+  private inventorySlots: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; count: number } | null> = [];
+  private selectedSlot = 0;
+  private wasLeftPressed = false;
+  private wasRightPressed = false;
+  private wasSpacePressed = false;
 
   constructor(canvasElementId: string) {
     const canvas = document.getElementById(canvasElementId) as HTMLCanvasElement;
@@ -96,6 +105,11 @@ export class GameEngine {
     this.tilemapRenderer = new TilemapRenderer(this.renderingContext);
     this.camera = new Camera();
     this.camera.setViewport(this.canvas.width, this.canvas.height);
+    // Initialize inventory bar (8 slots)
+    this.inventorySlots = new Array(8).fill(null);
+    this.inventorySlots[0] = { kind: 'seed', plantType: 'eye', count: 6 };
+    this.inventorySlots[1] = { kind: 'seed', plantType: 'tentacle', count: 6 };
+    this.inventorySlots[2] = { kind: 'seed', plantType: 'spike', count: 6 };
   }
 
   private setupViewportCanvas(): void {
@@ -187,6 +201,71 @@ export class GameEngine {
     console.log('Game stopped');
   }
 
+  // HUD snapshot for player resources
+  public getHUDSnapshot(): { water: number; maxWater: number; seeds: number; seedType: string; coins: number } {
+    const water = this.inventory.getWater();
+    const maxWater = this.inventory.getWaterCapacity();
+    const coins = this.inventory.getState().coins;
+    return {
+      water,
+      maxWater,
+      seeds: this.hudSeedCount,
+      seedType: this.hudSeedType,
+      coins,
+    };
+  }
+
+  public getInventoryView(): { items: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; count: number } | null>; selectedIndex: number } {
+    return { items: this.inventorySlots, selectedIndex: this.selectedSlot };
+  }
+
+  private moveSelection(dir: number): void {
+    const n = this.inventorySlots.length;
+    this.selectedSlot = (this.selectedSlot + dir + n) % n;
+  }
+
+  private hasAnySeeds(): boolean {
+    for (const it of this.inventorySlots) { if (it && it.kind === 'seed' && it.count > 0) return true; }
+    return false;
+  }
+
+  private consumeOneSeed(): void {
+    // Prefer selected slot if it is seeds
+    let idx = this.selectedSlot;
+    if (!(this.inventorySlots[idx] && this.inventorySlots[idx]!.kind === 'seed' && (this.inventorySlots[idx] as any).count > 0)) {
+      idx = this.inventorySlots.findIndex(it => it && it.kind === 'seed' && it.count > 0);
+      if (idx < 0) return;
+    }
+    const it = this.inventorySlots[idx] as any;
+    it.count -= 1;
+    if (it.count <= 0) this.inventorySlots[idx] = null;
+  }
+
+  private useSelectedItem(): void {
+    const it = this.inventorySlots[this.selectedSlot];
+    if (!it) { this.pushNotification('Empty slot'); return; }
+    if (it.kind === 'seed') {
+      const player = this.playerMovement.getPlayerCharacter();
+      const plantingPosition = this.calculatePlantingPosition(player);
+      const planted = this.plantManagement.handlePlantingClick(plantingPosition, it.plantType as any);
+      if (planted) {
+        this.consumeOneSeed();
+      } else {
+        this.pushNotification('Too close to another plant');
+      }
+    } else {
+      this.pushNotification('Used tool');
+    }
+  }
+
+  private getSelectedSeedType(): 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom' | null {
+    const it = this.inventorySlots[this.selectedSlot];
+    if (it && it.kind === 'seed' && it.count > 0) return it.plantType;
+    const idx = this.inventorySlots.findIndex(s => s && s.kind === 'seed' && s.count > 0);
+    if (idx >= 0) return (this.inventorySlots[idx] as any).plantType;
+    return null;
+  }
+
   private setupPlantingInput(): void {
     // Handle P key for planting
     let lastPlantTime = 0;
@@ -198,7 +277,13 @@ export class GameEngine {
         if (currentTime - lastPlantTime > PLANT_COOLDOWN) {
           const player = this.playerMovement.getPlayerCharacter();
           const plantingPosition = this.calculatePlantingPosition(player);
-          this.plantManagement.handlePlantingClick(plantingPosition);
+          if (this.hasAnySeeds()) {
+            const seedType = this.getSelectedSeedType();
+            const planted = this.plantManagement.handlePlantingClick(plantingPosition, seedType ?? undefined);
+            if (planted) this.consumeOneSeed(); else this.pushNotification('Too close to another plant');
+          } else {
+            this.pushNotification('No seeds');
+          }
           lastPlantTime = currentTime;
         }
       }
@@ -396,6 +481,18 @@ export class GameEngine {
     if (this.harvestingInputHandler) {
       this.harvestingInputHandler();
     }
+
+    // Bottom inventory selection and use
+    const left = this.keyboardInput.isKeyPressed('arrowleft');
+    const right = this.keyboardInput.isKeyPressed('arrowright');
+    if (left && !this.wasLeftPressed) this.moveSelection(-1);
+    if (right && !this.wasRightPressed) this.moveSelection(1);
+    this.wasLeftPressed = left;
+    this.wasRightPressed = right;
+
+    const space = this.keyboardInput.isKeyPressed(' ');
+    if (space && !this.wasSpacePressed) this.useSelectedItem();
+    this.wasSpacePressed = space;
 
     // If it's raining outside, water all unwatered seeds automatically
     if (this.isRainingOutside()) {
@@ -668,67 +765,7 @@ export class GameEngine {
 
   private renderHUD(): void {
     const ctx = this.renderingContext;
-    // Gather inventory state
-    const inv = this.inventory.getState();
-    const counts = inv.counts;
-    const lines: string[] = [`Coins: ${inv.coins}`, `Water: ${this.inventory.getWater()}/${this.inventory.getWaterCapacity()}`];
-    (Object.keys(counts) as Array<keyof typeof counts>).forEach(k => lines.push(`${String(k)}: ${counts[k]}`));
-    const padding = 8;
-    const lineH = 16;
-    const boxW = 160;
-    const boxH = padding * 2 + lineH * lines.length;
-    ctx.save();
-    // Box top-left
-    ctx.globalAlpha = 0.6;
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(10, 10, boxW, boxH);
-    ctx.globalAlpha = 1.0;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '12px monospace';
-    lines.forEach((t, i) => ctx.fillText(t, 10 + padding, 10 + padding + (i + 1) * lineH - 4));
-
-    // Contextual prompt if in range of interaction
-    const prompt = this.getInteractionPrompt();
-    if (prompt) {
-      const canvas = ctx.canvas;
-      const pw = ctx.measureText(prompt).width + 20;
-      const ph = 28;
-      const px = Math.floor((canvas.width - pw) / 2);
-      const py = canvas.height - ph - 16;
-      ctx.globalAlpha = 0.75;
-      ctx.fillStyle = '#111111';
-      ctx.fillRect(px, py, pw, ph);
-      ctx.globalAlpha = 1.0;
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '14px monospace';
-      ctx.fillText(prompt, px + 10, py + 18);
-    }
-
-    // Notifications (stacked above prompt)
-    const now = performance.now();
-    this.notifications = this.notifications.filter(n => n.until > now);
-    if (this.notifications.length) {
-      const canvas = ctx.canvas;
-      let y = canvas.height - 60;
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = '#000000';
-      ctx.font = '14px monospace';
-      this.notifications.forEach(n => {
-        const w = ctx.measureText(n.text).width + 20;
-        const x = Math.floor((canvas.width - w) / 2);
-        ctx.fillRect(x, y, w, 26);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(n.text, x + 10, y + 18);
-        ctx.fillStyle = '#000000';
-        y -= 32;
-      });
-      ctx.globalAlpha = 1.0;
-    }
-    ctx.restore();
-
-    // Controls overlay removed; using HTML legend instead
-
-    // Fade overlay (last)
+    // Draw only fade overlay here; other HUD is drawn on the HUD canvas overlay
     if (this.fadeTransition.active) {
       const now = performance.now();
       const t = Math.max(0, Math.min(1, (now - this.fadeTransition.start) / this.fadeTransition.duration));
@@ -759,6 +796,16 @@ export class GameEngine {
     }
     if (near.kind === 'well') return 'Press E to fill water (TODO)';
     return null;
+  }
+
+  public getOverlayTexts(): { prompt: string | null; notifications: string[] } {
+    // Filter notifications and return texts for HUD overlay rendering
+    const now = performance.now();
+    this.notifications = this.notifications.filter(n => n.until > now);
+    return {
+      prompt: this.getInteractionPrompt(),
+      notifications: this.notifications.map(n => n.text),
+    };
   }
 
   private getFeetAdjacentInteraction(): { kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' } | null {
@@ -924,5 +971,9 @@ export class GameEngine {
   // Expose whether the player is inside the interior scene
   public isInteriorScene(): boolean {
     return this.isInterior;
+  }
+
+  public getAssets(): GameAssets {
+    return this.gameAssets;
   }
 }
