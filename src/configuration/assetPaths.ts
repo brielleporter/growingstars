@@ -7,6 +7,7 @@ import { AssetPaths } from '../types/gameAssets.types';
 export const ASSET_PATHS: AssetPaths = {
   playerSpriteSheet: '/src/assets/sprites/walk.png',
   harvestSlashSpriteSheet: '/src/assets/sprites/slash.png',
+  waterSpriteSheet: '/src/assets/sprites/water.png',
   homeBackground: '/src/assets/maps/home.png',
   // Empty string means: use procedural barren background
   barrenBackground: '',

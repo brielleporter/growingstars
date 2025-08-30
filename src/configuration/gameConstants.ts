@@ -43,6 +43,18 @@ export const HARVEST_EFFECT_CONFIG = {
   scale: 1.0,
 } as const;
 
+// Watering effect spritesheet configuration
+export const WATER_EFFECT_CONFIG = {
+  /** Columns per row */
+  columns: 7,
+  /** Rows: up, left, down, right */
+  rows: 4,
+  /** Playback fps for water animation */
+  framesPerSecond: 18,
+  /** Scale relative to player height */
+  scale: 1.0,
+} as const;
+
 // Tile configuration
 export const TILE_CONFIG = {
   /** Base square tile size in pixels */

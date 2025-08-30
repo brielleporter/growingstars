@@ -9,6 +9,8 @@ export interface GameAssets {
   playerSprite: HTMLImageElement;
   /** Slash/harvest sprite sheet */
   harvestSlashSprite: HTMLImageElement;
+  /** Watering effect sprite sheet */
+  waterSprite: HTMLImageElement;
   /** Home background image */
   homeBackground: HTMLImageElement;
   /** Barren/alien background image (optional, may be empty path) */
@@ -31,6 +33,8 @@ export interface AssetPaths {
   playerSpriteSheet: string;
   /** Path to harvest slash sprite sheet */
   harvestSlashSpriteSheet: string;
+  /** Path to watering effect sprite sheet */
+  waterSpriteSheet: string;
   /** Path to home background */
   homeBackground: string;
   /** Path to barren background (can be empty to use procedural) */

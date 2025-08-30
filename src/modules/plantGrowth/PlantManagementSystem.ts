@@ -18,12 +18,14 @@ export class PlantManagementSystem {
     const currentTime = performance.now();
     
     this.plantedEntities.forEach(plant => {
-      if (!plant.hasGrown) {
-        const elapsedTimeSeconds = (currentTime - plant.plantingTime) / 1000;
-        if (elapsedTimeSeconds >= PLANT_CONFIG.growthDurationSeconds) {
-          plant.hasGrown = true;
-          console.log(`Plant at (${plant.xPosition}, ${plant.yPosition}) has grown into a ${plant.plantType} plant!`);
-        }
+      if (plant.hasGrown) return;
+      // Growth is gated until watered
+      if (!plant.watered) return;
+      const start = plant.wateringStartTime ?? plant.plantingTime;
+      const elapsedTimeSeconds = (currentTime - start) / 1000;
+      if (elapsedTimeSeconds >= PLANT_CONFIG.growthDurationSeconds) {
+        plant.hasGrown = true;
+        console.log(`Plant at (${plant.xPosition}, ${plant.yPosition}) has grown into a ${plant.plantType} plant!`);
       }
     });
   }
@@ -130,6 +132,46 @@ export class PlantManagementSystem {
     return false;
   }
 
+  /** Water a seed at the exact tile; starts growth timer if not already watered. */
+  public waterAtTile(tileX: number, tileY: number, tileSize: number): boolean {
+    const p = this.plantedEntities.find(pl => {
+      if (pl.hasGrown) return false;
+      const px = Math.floor(pl.xPosition / tileSize);
+      const py = Math.floor(pl.yPosition / tileSize);
+      return px === tileX && py === tileY;
+    });
+    if (!p) return false;
+    if (!p.watered) {
+      p.watered = true;
+      p.wateringStartTime = performance.now();
+      console.log(`Watered plant at tile (${tileX}, ${tileY})`);
+      return true;
+    }
+    return false;
+  }
+
+  /** Water the nearest not-grown plant within a given distance of position; returns true if watered. */
+  public waterNearest(position: { x: number; y: number }, maxDistance: number): boolean {
+    let best: PlantEntity | null = null;
+    let bestDistSq = Number.POSITIVE_INFINITY;
+    for (const p of this.plantedEntities) {
+      if (p.hasGrown) continue;
+      if (p.watered) continue;
+      const dx = p.xPosition - position.x;
+      const dy = p.yPosition - position.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 <= maxDistance * maxDistance && d2 < bestDistSq) {
+        bestDistSq = d2;
+        best = p;
+      }
+    }
+    if (!best) return false;
+    best.watered = true;
+    best.wateringStartTime = performance.now();
+    console.log(`Watered nearest plant at (${best.xPosition}, ${best.yPosition})`);
+    return true;
+  }
+
   private plantSeed(position: ClickPosition): void {
     const randomPlantType = this.getRandomPlantType();
     
@@ -137,6 +179,8 @@ export class PlantManagementSystem {
       xPosition: position.x,
       yPosition: position.y,
       plantingTime: performance.now(),
+      watered: false,
+      wateringStartTime: null,
       hasGrown: false,
       plantType: randomPlantType,
     };

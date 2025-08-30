@@ -11,6 +11,10 @@ export interface PlantEntity {
   yPosition: number;
   /** Timestamp when the plant was planted */
   plantingTime: number;
+  /** Whether the plant has been watered to begin growth */
+  watered: boolean;
+  /** Timestamp when watering started (growth timer starts from this) */
+  wateringStartTime?: number | null;
   /** Whether the plant has finished growing */
   hasGrown: boolean;
   /** The type of plant that will grow */

@@ -5,7 +5,7 @@
 export class KeyboardInputManager {
   private pressedKeys = new Set<string>();
   private validKeys = [
-    'w', 'a', 's', 'd', 'p', 'b', 'e', 'h',
+    'w', 'a', 's', 'd', 'p', 'b', 'e', 'h', 'q',
     '1', '2', '3', '4'
   ];
   private boundDown?: (e: KeyboardEvent) => void;

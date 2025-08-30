@@ -32,6 +32,16 @@ export class PlantRenderer {
         this.renderMaturePlant(plant, assets);
       } else {
         this.renderSeedPlant(plant, assets);
+        // Visual hint for watered seeds
+        if ((plant as any).watered) {
+          this.renderingContext.save();
+          this.renderingContext.globalAlpha = 0.25;
+          this.renderingContext.fillStyle = '#4aa3ff';
+          this.renderingContext.beginPath();
+          this.renderingContext.arc(plant.xPosition, plant.yPosition, 8 * RENDER_CONFIG.plantScale, 0, Math.PI * 2);
+          this.renderingContext.fill();
+          this.renderingContext.restore();
+        }
       }
     }
     

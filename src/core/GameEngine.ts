@@ -3,7 +3,7 @@
  */
 
 import { GameAssets } from '../types/gameAssets.types';
-import { SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG, TILE_CONFIG, WORLD_CONFIG, HARVEST_EFFECT_CONFIG, HOUSE_CONFIG, PLANT_PRICES } from '../configuration/gameConstants';
+import { SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG, TILE_CONFIG, WORLD_CONFIG, HARVEST_EFFECT_CONFIG, WATER_EFFECT_CONFIG, HOUSE_CONFIG, PLANT_PRICES } from '../configuration/gameConstants';
 import type { PlantEntity } from '../types/plantSystem.types';
 import { InventorySystem } from '../modules/inventory/InventorySystem';
 import { PlayerCharacter } from '../types/playerCharacter.types';
@@ -50,10 +50,11 @@ export class GameEngine {
   private isRunning = false;
   private lastTimestamp = 0;
   private harvestingInputHandler?: () => void;
-  private activeEffects: Array<{ x: number; baselineY: number; start: number; kind: 'slash'; row: number; targetHeight: number; targetPlant?: PlantEntity }>=[];
+  private activeEffects: Array<{ x: number; baselineY: number; start: number; kind: 'slash' | 'water'; row: number; targetHeight: number; targetPlant?: PlantEntity }>=[];
   private notifications: Array<{ text: string; until: number }> = [];
   private wasEPressed = false;
   private suppressEmptyShipPrompt = false;
+  private wasQPressed = false;
   private inventory: InventorySystem;
 
   constructor(canvasElementId: string) {
@@ -243,6 +244,49 @@ export class GameEngine {
     this.harvestingInputHandler = harvestHandler;
   }
 
+  private handleWatering(): void {
+    const player = this.playerMovement.getPlayerCharacter();
+    const now = performance.now();
+    const spriteCfg = this.playerRenderer.getSpriteConfiguration();
+    if (!spriteCfg.frameHeight) return;
+    const displayHeight = spriteCfg.frameHeight * RENDER_CONFIG.playerScale;
+    const baselineY = player.yPosition + displayHeight / 2;
+    const targetHeight = Math.floor(displayHeight * WATER_EFFECT_CONFIG.scale);
+    const row = player.currentRow;
+    this.activeEffects.push({ x: player.xPosition, baselineY, start: now, kind: 'water', row, targetHeight });
+    // Attempt to water nearby tiles: forward, current, and orthogonal neighbors
+    const tile = TILE_CONFIG.tileSize;
+    const feetX = player.xPosition;
+    const feetY = player.yPosition + displayHeight / 2;
+    const ftX = Math.floor(feetX / tile);
+    const ftY = Math.floor(feetY / tile);
+    let fwdX = ftX, fwdY = ftY;
+    switch (player.currentRow) {
+      case SPRITE_DIRECTIONS.up:    fwdY = ftY - 1; break;
+      case SPRITE_DIRECTIONS.down:  fwdY = ftY + 1; break;
+      case SPRITE_DIRECTIONS.left:  fwdX = ftX - 1; break;
+      case SPRITE_DIRECTIONS.right: fwdX = ftX + 1; break;
+    }
+    const candidates: Array<{x:number;y:number}> = [
+      { x: fwdX, y: fwdY },
+      { x: ftX,  y: ftY },
+      { x: ftX - 1, y: ftY },
+      { x: ftX + 1, y: ftY },
+      { x: ftX, y: ftY - 1 },
+      { x: ftX, y: ftY + 1 },
+    ];
+    let watered = false;
+    for (const c of candidates) {
+      if (this.plantManagement.waterAtTile(c.x, c.y, tile)) { watered = true; break; }
+    }
+    if (!watered) {
+      // final fallback around feet to catch any off-grid placements
+      this.plantManagement.waterNearest({ x: feetX, y: feetY }, tile * 0.95);
+    } else {
+      this.pushNotification('Watered');
+    }
+  }
+
   private plantingInputHandler?: () => void;
 
   private calculatePlantingPosition(player: PlayerCharacter): { x: number; y: number } {
@@ -334,6 +378,12 @@ export class GameEngine {
       this.handleInteractions();
     }
     this.wasEPressed = ePressed;
+    // Handle watering (Q key) on key-down edge
+    const qPressed = this.keyboardInput.isKeyPressed('q');
+    if (qPressed && !this.wasQPressed) {
+      this.handleWatering();
+    }
+    this.wasQPressed = qPressed;
     // Handle harvesting input
     if (this.harvestingInputHandler) {
       this.harvestingInputHandler();
@@ -454,10 +504,10 @@ export class GameEngine {
       { x: this.camera.x, y: this.camera.y }
     );
 
-    // Render player character unless slash is replacing idle
+    // Render player character unless an effect should replace idle
     const playerForRender = this.playerMovement.getPlayerCharacter();
-    const replaceIdleWithSlash = !playerForRender.isMoving && this.hasActiveSlashEffect();
-    if (!replaceIdleWithSlash) {
+    const replaceIdle = !playerForRender.isMoving && (this.isEffectActive('slash') || this.isEffectActive('water'));
+    if (!replaceIdle) {
       this.playerRenderer.renderPlayerCharacter(
         playerForRender,
         this.gameAssets,
@@ -483,16 +533,21 @@ export class GameEngine {
       this.activeEffects = [];
       return;
     }
-    const { columns, rows, framesPerSecond } = HARVEST_EFFECT_CONFIG;
-    const secPerFrame = 1 / framesPerSecond;
-    const frameW = Math.floor(img.naturalWidth / columns);
-    const frameH = Math.floor(img.naturalHeight / rows);
+    const { columns: hCols, rows: hRows } = HARVEST_EFFECT_CONFIG;
+    const frameWSlash = Math.floor(img.naturalWidth / hCols);
+    const frameHSlash = Math.floor(img.naturalHeight / hRows);
 
     const effectsLeft: typeof this.activeEffects = [];
     for (const e of this.activeEffects) {
       const elapsed = (now - e.start) / 1000;
+      const isSlash = e.kind === 'slash';
+      const cfg = isSlash ? HARVEST_EFFECT_CONFIG : WATER_EFFECT_CONFIG;
+      const imgKind = isSlash ? this.gameAssets.harvestSlashSprite : this.gameAssets.waterSprite;
+      const secPerFrame = 1 / cfg.framesPerSecond;
+      const frameW = isSlash ? frameWSlash : Math.floor(imgKind.naturalWidth / cfg.columns);
+      const frameH = isSlash ? frameHSlash : Math.floor(imgKind.naturalHeight / cfg.rows);
       const frameIndex = Math.floor(elapsed / secPerFrame);
-      if (frameIndex >= columns) {
+      if (frameIndex >= cfg.columns) {
         if (e.kind === 'slash' && e.targetPlant) {
           if (this.plantManagement.removePlant(e.targetPlant)) {
             this.inventory.addPlant(e.targetPlant.plantType);
@@ -501,8 +556,8 @@ export class GameEngine {
         continue; // finished
       }
       effectsLeft.push(e);
-      const col = frameIndex % columns;
-      const row = Math.max(0, Math.min(rows - 1, e.row));
+      const col = frameIndex % cfg.columns;
+      const row = Math.max(0, Math.min(cfg.rows - 1, e.row));
       const sx = col * frameW;
       const sy = row * frameH;
       const dh = Math.max(1, Math.floor(e.targetHeight));
@@ -512,7 +567,7 @@ export class GameEngine {
       ctx.translate(-this.camera.x, -this.camera.y);
       ctx.globalAlpha = 0.95;
       ctx.drawImage(
-        img,
+        imgKind,
         sx, sy, frameW, frameH,
         Math.round(e.x - dw / 2),
         Math.round(e.baselineY - dh),
@@ -523,17 +578,16 @@ export class GameEngine {
     this.activeEffects = effectsLeft;
   }
 
-  private hasActiveSlashEffect(): boolean {
+  // hasActiveSlashEffect superseded by isEffectActive(kind)
+
+  private isEffectActive(kind: 'slash' | 'water'): boolean {
     const now = performance.now();
-    const img = this.gameAssets.harvestSlashSprite;
-    if (!img || !img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) return false;
-    const { columns, framesPerSecond } = HARVEST_EFFECT_CONFIG;
-    const secPerFrame = 1 / framesPerSecond;
+    const cfg = kind === 'slash' ? HARVEST_EFFECT_CONFIG : WATER_EFFECT_CONFIG;
+    const secPerFrame = 1 / cfg.framesPerSecond;
     for (const e of this.activeEffects) {
-      if (e.kind !== 'slash') continue;
+      if (e.kind !== kind) continue;
       const elapsed = (now - e.start) / 1000;
-      const frameIndex = Math.floor(elapsed / secPerFrame);
-      if (frameIndex < columns) return true;
+      if (Math.floor(elapsed / secPerFrame) < cfg.columns) return true;
     }
     return false;
   }
@@ -596,6 +650,29 @@ export class GameEngine {
       });
       ctx.globalAlpha = 1.0;
     }
+    ctx.restore();
+
+    // Controls overlay (top-right)
+    ctx.save();
+    const ctrl = [
+      'Controls:',
+      'WASD: Move',
+      'P: Plant seed',
+      'Q: Water (start growth)',
+      'H: Harvest (final stage)',
+      'E: Interact (Ship/Well)',
+      'B: Toggle background',
+    ];
+    const cw = 220;
+    const ch = padding * 2 + lineH * ctrl.length;
+    const canvas = this.renderingContext.canvas;
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(canvas.width - cw - 10, 10, cw, ch);
+    ctx.globalAlpha = 1.0;
+    ctx.fillStyle = '#fff';
+    ctx.font = '12px monospace';
+    ctrl.forEach((t, i) => ctx.fillText(t, canvas.width - cw - 10 + padding, 10 + padding + (i + 1) * lineH - 4));
     ctx.restore();
   }
 
