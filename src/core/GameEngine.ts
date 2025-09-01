@@ -162,6 +162,18 @@ export class GameEngine {
     this.staminaSystem.onNotificationRequested((message) => {
       this.pushNotification(message);
     });
+    
+    // Set up shop item refresh on day/season changes
+    let lastDay = timeManager.getState().day;
+    let lastSeason = timeManager.getState().seasonIndex;
+    
+    timeManager.addListener((state) => {
+      if (state.day !== lastDay || state.seasonIndex !== lastSeason) {
+        this.refreshShopItems(state.day, state.seasonIndex);
+        lastDay = state.day;
+        lastSeason = state.seasonIndex;
+      }
+    });
   }
 
   public async initialize(): Promise<void> {
@@ -251,6 +263,9 @@ export class GameEngine {
       this.updateWorldCollisions();
     };
     this.storefrontImage.src = '/src/assets/cursedLand/objectsSeparately/bonesShadow21.png';
+
+    // Initialize shop items
+    this.refreshShopItems();
 
     console.log('Game engine initialized successfully');
   }
