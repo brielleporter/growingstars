@@ -63,10 +63,17 @@ export class StaminaSystem {
   public update(): void {
     const currentGameTime = this.timeManager.getCurrentGameTime();
     
+<<<<<<< HEAD
     this.resetDailyFlags(currentGameTime);
     this.updateStaminaDepletion(currentGameTime);
     this.checkSleepReminder(currentGameTime);
     this.checkAutoSleep(currentGameTime);
+=======
+    this.resetDailyFlags(currentTime);
+    this.updateStaminaDepletion();
+    this.checkSleepReminder(currentTime);
+    this.checkAutoSleep(currentTime);
+>>>>>>> bca5842 (feat(hoe): 3x3 patch placement, autotile edges/corners; respect existing center dirt; fix corner orientation; expand retile radius; add hoe tool icon and usage)
   }
 
   public sleep(): void {
@@ -104,7 +111,11 @@ export class StaminaSystem {
     }
   }
 
+<<<<<<< HEAD
   private updateStaminaDepletion(_currentGameTime: GameTime): void {
+=======
+  private updateStaminaDepletion(): void {
+>>>>>>> bca5842 (feat(hoe): 3x3 patch placement, autotile edges/corners; respect existing center dirt; fix corner orientation; expand retile radius; add hoe tool icon and usage)
     // Get continuous time from TimeManager for smooth depletion
     const currentTimeState = this.timeManager.getState();
     const currentDayProgressRatio = currentTimeState.secondsIntoDay / currentTimeState.dayDurationSeconds; // 0-1

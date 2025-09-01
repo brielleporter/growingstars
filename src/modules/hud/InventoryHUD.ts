@@ -1,4 +1,7 @@
-export type InventoryItem = ({ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; count: number }) | null;
+export type InventoryItem = (
+  { kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number }
+  | { kind: 'tool'; toolType: 'hoe' | 'wrench'; count: number }
+) | null;
 
 export function renderInventory(
   ctx: CanvasRenderingContext2D,
@@ -47,17 +50,21 @@ function drawItemIcon(ctx: CanvasRenderingContext2D, x: number, y: number, s: nu
   if (item.kind === 'seed') {
     drawSproutIcon(ctx, x + s * 0.16, y + s * 0.14, Math.min(18, s * 0.70));
   } else {
-    // simple tool: wrench-like glyph
-    ctx.save();
-    ctx.strokeStyle = '#89ffe8';
-    ctx.lineWidth = 2;
-    const cx = x + s * 0.5, cy = y + s * 0.5;
-    ctx.beginPath();
-    ctx.arc(cx - 4, cy - 6, 5, Math.PI * 0.3, Math.PI * 1.7);
-    ctx.moveTo(cx - 1, cy - 2);
-    ctx.lineTo(cx + 6, cy + 6);
-    ctx.stroke();
-    ctx.restore();
+    if ((item as any).toolType === 'hoe') {
+      drawHoeIcon(ctx, x, y, s);
+    } else {
+      // fallback: wrench-like glyph
+      ctx.save();
+      ctx.strokeStyle = '#89ffe8';
+      ctx.lineWidth = 2;
+      const cx = x + s * 0.5, cy = y + s * 0.5;
+      ctx.beginPath();
+      ctx.arc(cx - 4, cy - 6, 5, Math.PI * 0.3, Math.PI * 1.7);
+      ctx.moveTo(cx - 1, cy - 2);
+      ctx.lineTo(cx + 6, cy + 6);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 }
 
@@ -86,6 +93,34 @@ function drawSproutIcon(ctx: CanvasRenderingContext2D, x: number, y: number, siz
   ctx.ellipse(x + size * 0.38, y + size * 0.42, size * 0.18, size * 0.10, -0.6, 0, Math.PI * 2);
   ctx.ellipse(x + size * 0.62, y + size * 0.40, size * 0.18, size * 0.10, 0.6, 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
+}
+
+function drawHoeIcon(ctx: CanvasRenderingContext2D, x: number, y: number, s: number): void {
+  ctx.save();
+  const pad = 6;
+  const x1 = x + pad, y1 = y + s - pad;
+  const x2 = x + s - pad, y2 = y + pad;
+  // handle
+  ctx.strokeStyle = '#c8a26a';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  // blade near top end
+  const bx = x2 - 4, by = y2 + 2;
+  ctx.fillStyle = '#43ffd9';
+  ctx.shadowColor = '#43ffd9';
+  ctx.shadowBlur = 6;
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(bx + 8, by + 2);
+  ctx.lineTo(bx + 4, by + 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
   ctx.restore();
 }
 

@@ -19,7 +19,7 @@ import { PlayerCharacterRenderer } from '../modules/rendering/PlayerCharacterRen
 import { MapLoader, LoadedMap } from '../modules/tilemap/MapLoader';
 import { TilemapRenderer } from '../modules/rendering/TilemapRenderer';
 import { Camera } from '../modules/rendering/Camera';
-import { TimeManager } from '../modules/time/TimeManager';
+import type { TimeManager } from '../modules/time/TimeManager';
 import { StaminaSystem } from '../modules/player/StaminaSystem';
 
 export class GameEngine {
@@ -72,6 +72,7 @@ export class GameEngine {
   private hudDisplaySeedType: string = 'sprout';
   private hudDisplaySeedCount: number = 12;
   // Bottom inventory bar
+<<<<<<< HEAD
   private playerInventorySlots: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; count: number } | null> = [];
   private selectedInventorySlotIndex = 0;
   private wasLeftArrowPressed = false;
@@ -83,6 +84,22 @@ export class GameEngine {
   private wasEscapeKeyPressed = false;
   // Player systems
   // timeManager is passed to setTimeManager but not stored as it's managed externally
+=======
+  private inventorySlots: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; toolType?: 'hoe' | 'wrench'; count: number } | null> = [];
+  // Track hoed tiles (within base chunk coords)
+  private hoed: Set<string> = new Set();
+  // Tiles that came pre-hoed in the map (center dirt 32,336) and should not be overwritten
+  private lockedHoed: Set<string> = new Set();
+  private selectedSlot = 0;
+  private wasLeftPressed = false;
+  private wasRightPressed = false;
+  private wasSpacePressed = false;
+  private wasUpPressed = false;
+  private wasDownPressed = false;
+  private wasEnterPressed = false;
+  private wasEscPressed = false;
+  // Player systems
+>>>>>>> bca5842 (feat(hoe): 3x3 patch placement, autotile edges/corners; respect existing center dirt; fix corner orientation; expand retile radius; add hoe tool icon and usage)
   private staminaSystem?: StaminaSystem;
 
   constructor(canvasElementId: string) {
@@ -123,10 +140,18 @@ export class GameEngine {
     this.camera = new Camera();
     this.camera.setViewport(this.canvas.width, this.canvas.height);
     // Initialize inventory bar (8 slots)
+<<<<<<< HEAD
     this.playerInventorySlots = new Array(8).fill(null);
     this.playerInventorySlots[0] = { kind: 'seed', plantType: 'eye', count: 6 };
     this.playerInventorySlots[1] = { kind: 'seed', plantType: 'tentacle', count: 6 };
     this.playerInventorySlots[2] = { kind: 'seed', plantType: 'spike', count: 6 };
+=======
+    this.inventorySlots = new Array(8).fill(null);
+    this.inventorySlots[0] = { kind: 'seed', plantType: 'eye', count: 6 } as any;
+    this.inventorySlots[1] = { kind: 'seed', plantType: 'tentacle', count: 6 } as any;
+    this.inventorySlots[2] = { kind: 'seed', plantType: 'spike', count: 6 } as any;
+    this.inventorySlots[3] = { kind: 'tool', toolType: 'hoe', count: 1 } as any;
+>>>>>>> bca5842 (feat(hoe): 3x3 patch placement, autotile edges/corners; respect existing center dirt; fix corner orientation; expand retile radius; add hoe tool icon and usage)
   }
 
   private setupViewportCanvas(): void {
@@ -349,7 +374,12 @@ export class GameEngine {
         this.pushNotification('Too close to another plant');
       }
     } else {
-      this.pushNotification('Used tool');
+      const tool = it as any;
+      if (tool.toolType === 'hoe') {
+        this.applyHoe();
+      } else {
+        this.pushNotification('Used tool');
+      }
     }
   }
 
@@ -1192,5 +1222,110 @@ export class GameEngine {
       return { plantType: p.plantType, price: Math.max(1, p.basePrice + delta) };
     });
     this.selectedShopItemIndex = 0;
+  }
+
+
+  private applyHoe(): void {
+    if (!this.worldMap) return;
+    const tileSize = TILE_CONFIG.tileSize;
+    const player = this.playerMovement.getPlayerCharacter();
+    const target = this.calculatePlantingPosition(player);
+    const cx = Math.floor((target.x - this.centerOrigin.x) / tileSize);
+    const cy = Math.floor((target.y - this.centerOrigin.y) / tileSize);
+    if (cx < 0 || cy < 0 || cx >= this.worldMap.widthTiles || cy >= this.worldMap.heightTiles) return;
+
+    // Mark a full 3x3 patch centered at (cx, cy) as hoed
+    const minX = Math.max(0, cx - 1);
+    const maxX = Math.min(this.worldMap.widthTiles - 1, cx + 1);
+    const minY = Math.max(0, cy - 1);
+    const maxY = Math.min(this.worldMap.heightTiles - 1, cy + 1);
+    const layer = this.worldMap.layers.find(l => l.name.toLowerCase().includes('dirt'));
+    let centerGid = 0;
+    const ts = this.worldMap.tilesets.find(t => t.tilewidth === 16 && t.tileheight === 16 && t.columns === 17 && (t as any).image?.naturalWidth === 272 && (t as any).image?.naturalHeight === 912);
+    if (ts) centerGid = ts.firstgid + 359; // center localId
+    for (let ty = minY; ty <= maxY; ty++) {
+      for (let tx = minX; tx <= maxX; tx++) {
+        const key = `${tx},${ty}`;
+        this.hoed.add(key);
+        if (layer && centerGid) {
+          const idx = ty * this.worldMap.widthTiles + tx;
+          if ((layer.data[idx] | 0) === centerGid) {
+            this.lockedHoed.add(key);
+          }
+        }
+      }
+    }
+    // Retile the 3x3 patch and a 2-tile perimeter around it for smooth edges across connections
+    const rminX = Math.max(0, minX - 2);
+    const rmaxX = Math.min(this.worldMap.widthTiles - 1, maxX + 2);
+    const rminY = Math.max(0, minY - 2);
+    const rmaxY = Math.min(this.worldMap.heightTiles - 1, maxY + 2);
+    for (let ty = rminY; ty <= rmaxY; ty++) {
+      for (let tx = rminX; tx <= rmaxX; tx++) {
+        this.retileAt(tx, ty);
+      }
+    }
+    this.pushNotification('Hoed');
+  }
+
+  private retileAt(tx: number, ty: number): void {
+    if (!this.worldMap) return;
+    if (tx < 0 || ty < 0 || tx >= this.worldMap.widthTiles || ty >= this.worldMap.heightTiles) return;
+    const layer = this.worldMap.layers.find(l => l.name.toLowerCase().includes('dirt'));
+    if (!layer) return;
+    const idx = ty * this.worldMap.widthTiles + tx;
+    const key = `${tx},${ty}`;
+    if (!this.hoed.has(key)) {
+      return;
+    }
+    const n = this.hoed.has(`${tx},${ty-1}`);
+    const s = this.hoed.has(`${tx},${ty+1}`);
+    const w = this.hoed.has(`${tx-1},${ty}`);
+    const e = this.hoed.has(`${tx+1},${ty}`);
+    const role = this.pickDirtRole(n, e, s, w);
+    const gid = this.dirtRoleToGid(role);
+    if (gid) layer.data[idx] = gid;
+  }
+
+  private pickDirtRole(n: boolean, e: boolean, s: boolean, w: boolean): 'center'|'edge_n'|'edge_e'|'edge_s'|'edge_w'|'corner_nw'|'corner_ne'|'corner_sw'|'corner_se' {
+    // Determine outside neighbors (non-hoed) around this hoed tile
+    const on = !n, oe = !e, os = !s, ow = !w;
+    const outsideCount = (on?1:0) + (oe?1:0) + (os?1:0) + (ow?1:0);
+
+    // Adjacent outside pair => corner tile (connects those two edges)
+    if (on && ow) return 'corner_nw';
+    if (ow && os) return 'corner_sw';
+    if (os && oe) return 'corner_se';
+    if (oe && on) return 'corner_ne';
+
+    // Single outside => edge toward that outside
+    if (outsideCount === 1) {
+      if (on) return 'edge_n';
+      if (oe) return 'edge_e';
+      if (os) return 'edge_s';
+      if (ow) return 'edge_w';
+    }
+
+    // Opposite outside (two) or none => center fallback
+    return 'center';
+  }
+
+  private dirtRoleToGid(role: string): number | 0 {
+    if (!this.worldMap) return 0;
+    const ts = this.worldMap.tilesets.find(t => t.tilewidth === 16 && t.tileheight === 16 && t.columns === 17 && t.image.naturalWidth === 272 && t.image.naturalHeight === 912);
+    if (!ts) return 0;
+    const localMap: Record<string, number> = {
+      center: 359,
+      edge_w: 358,
+      edge_s: 376,
+      edge_e: 360,
+      edge_n: 342,
+      corner_nw: 341,
+      corner_sw: 375,
+      corner_se: 377,
+      corner_ne: 343,
+    };
+    const lid = localMap[role] ?? 359;
+    return ts.firstgid + lid;
   }
 }

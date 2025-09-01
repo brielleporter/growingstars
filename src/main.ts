@@ -191,6 +191,7 @@ if (document.readyState === 'loading') {
             itemContext.restore();
             return;
           }
+<<<<<<< HEAD
           // Tools: simple glyph
           itemContext.save();
           itemContext.strokeStyle = '#89ffe8';
@@ -203,6 +204,45 @@ if (document.readyState === 'loading') {
           itemContext.lineTo(toolIconCenterX + 6, toolIconCenterY + 6);
           itemContext.stroke();
           itemContext.restore();
+=======
+          // Tools: draw hoe icon if toolType present
+          if ((item as any).toolType === 'hoe') {
+            const pad = 6;
+            const x1 = x + pad, y1 = y + size - pad;
+            const x2 = x + size - pad, y2 = y + pad;
+            ictx.save();
+            ictx.strokeStyle = '#c8a26a';
+            ictx.lineWidth = 3;
+            ictx.lineCap = 'round';
+            ictx.beginPath();
+            ictx.moveTo(x1, y1);
+            ictx.lineTo(x2, y2);
+            ictx.stroke();
+            const bx = x2 - 4, by = y2 + 2;
+            ictx.fillStyle = '#43ffd9';
+            ictx.shadowColor = '#43ffd9';
+            ictx.shadowBlur = 6;
+            ictx.beginPath();
+            ictx.moveTo(bx, by);
+            ictx.lineTo(bx + 8, by + 2);
+            ictx.lineTo(bx + 4, by + 8);
+            ictx.closePath();
+            ictx.fill();
+            ictx.shadowBlur = 0;
+            ictx.restore();
+          } else {
+            ictx.save();
+            ictx.strokeStyle = '#89ffe8';
+            ictx.lineWidth = 2;
+            const cx = x + size * 0.5, cy = y + size * 0.5;
+            ictx.beginPath();
+            ictx.arc(cx - 4, cy - 6, 5, Math.PI * 0.3, Math.PI * 1.7);
+            ictx.moveTo(cx - 1, cy - 2);
+            ictx.lineTo(cx + 6, cy + 6);
+            ictx.stroke();
+            ictx.restore();
+          }
+>>>>>>> bca5842 (feat(hoe): 3x3 patch placement, autotile edges/corners; respect existing center dirt; fix corner orientation; expand retile radius; add hoe tool icon and usage)
         });
         // Prompt and notifications above the inventory bar
         if (typeof gameEngineForHUD.getOverlayTexts === 'function') {
