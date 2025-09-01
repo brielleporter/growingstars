@@ -892,6 +892,8 @@ export class GameEngine {
         this.camera.follow(p.xPosition, p.yPosition);
         // Recompute house world and interactions
         this.houseWorld = { x: this.centerOrigin.x + Math.floor((HOUSE_CONFIG.tileX + 0.5) * tile), y: this.centerOrigin.y + Math.floor((HOUSE_CONFIG.tileY + 1) * tile) };
+        // Restore exterior collision state (no static collisions on exterior map)
+        this.staticCollisionRects = [];
         this.buildInteractionAreas();
         this.updateWorldCollisions();
         this.pushNotification('Exited house');
