@@ -7,7 +7,7 @@ export class KeyboardInputManager {
   private validKeys = [
     'w', 'a', 's', 'd', 'p', 'b', 'e', 'h', 'q',
     '1', '2', '3', '4',
-    'arrowleft', 'arrowright', ' ', 'space'
+    'arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'enter', 'escape', ' ', 'space'
   ];
   private boundDown?: (e: KeyboardEvent) => void;
   private boundUp?: (e: KeyboardEvent) => void;

@@ -57,6 +57,13 @@ export class InventorySystem {
     return this.coins;
   }
 
+  public spendCoins(amount: number): boolean {
+    if (amount <= 0) return true;
+    if (this.coins < amount) return false;
+    this.coins -= amount;
+    return true;
+  }
+
   public getState(): InventoryState {
     return { counts: { ...this.counts }, coins: this.coins, capacity: this.capacity };
   }

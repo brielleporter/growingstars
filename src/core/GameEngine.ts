@@ -50,6 +50,10 @@ export class GameEngine {
   private storefrontImage: HTMLImageElement | null = null;
   private storefrontWorld = { x: 0, y: 0 };
   private storefrontCollision: { x: number; y: number; w: number; h: number } | null = null;
+  // Shop UI state
+  private shopOpen = false;
+  private shopSelected = 0;
+  private shopItems: Array<{ plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; price: number }> = [];
 
   // Game state
   private gameAssets!: GameAssets;
@@ -71,6 +75,10 @@ export class GameEngine {
   private wasLeftPressed = false;
   private wasRightPressed = false;
   private wasSpacePressed = false;
+  private wasUpPressed = false;
+  private wasDownPressed = false;
+  private wasEnterPressed = false;
+  private wasEscPressed = false;
 
   constructor(canvasElementId: string) {
     const canvas = document.getElementById(canvasElementId) as HTMLCanvasElement;
@@ -212,6 +220,9 @@ export class GameEngine {
       const y = Math.floor(topY + cropTop);
       const h = Math.max(tile, h0 - cropTop - cropBottom);
       this.storefrontCollision = { x, y, w, h };
+      // Refresh interactions and collisions now that storefront bounds are known
+      this.buildInteractionAreas();
+      this.updateWorldCollisions();
     };
     this.storefrontImage.src = '/src/assets/cursedLand/objectsSeparately/bonesShadow21.png';
 
@@ -498,7 +509,7 @@ export class GameEngine {
     }
 
     // Handle planting input
-    if (this.plantingInputHandler) {
+    if (this.plantingInputHandler && !this.shopOpen) {
       this.plantingInputHandler();
     }
     // Handle interactions (E key) on key-down edge to avoid spamming
@@ -509,22 +520,31 @@ export class GameEngine {
     this.wasEPressed = ePressed;
     // Handle watering (Q key) on key-down edge
     const qPressed = this.keyboardInput.isKeyPressed('q');
-    if (qPressed && !this.wasQPressed) {
+    if (qPressed && !this.wasQPressed && !this.shopOpen) {
       this.handleWatering();
     }
     this.wasQPressed = qPressed;
     // Handle harvesting input
-    if (this.harvestingInputHandler) {
+    if (this.harvestingInputHandler && !this.shopOpen) {
       this.harvestingInputHandler();
     }
 
-    // Bottom inventory selection and use
-    const left = this.keyboardInput.isKeyPressed('arrowleft');
-    const right = this.keyboardInput.isKeyPressed('arrowright');
-    if (left && !this.wasLeftPressed) this.moveSelection(-1);
-    if (right && !this.wasRightPressed) this.moveSelection(1);
-    this.wasLeftPressed = left;
-    this.wasRightPressed = right;
+    // Shop input handling
+    if (this.shopOpen) {
+      this.handleShopInput();
+    } else {
+      // Inventory selection only when shop closed
+      const left = this.keyboardInput.isKeyPressed('arrowleft');
+      const right = this.keyboardInput.isKeyPressed('arrowright');
+      if (left && !this.wasLeftPressed) this.moveSelection(-1);
+      if (right && !this.wasRightPressed) this.moveSelection(1);
+      this.wasLeftPressed = left;
+      this.wasRightPressed = right;
+
+      const space = this.keyboardInput.isKeyPressed(' ');
+      if (space && !this.wasSpacePressed) this.useSelectedItem();
+      this.wasSpacePressed = space;
+    }
 
     const space = this.keyboardInput.isKeyPressed(' ');
     if (space && !this.wasSpacePressed) this.useSelectedItem();
@@ -622,10 +642,24 @@ export class GameEngine {
       const doorX = Math.floor(this.houseWorld.x - tile / 2);
       const doorY = Math.floor(this.houseWorld.y - tile);
       areas.push({ x: doorX, y: doorY, w: tile, h: tile, kind: 'enterHouse' });
-      // Storefront interact area at bottom-center tile of the PNG
-      const tx = Math.floor(this.storefrontWorld.x / tile);
-      const ty = Math.floor((this.storefrontWorld.y - tile) / tile);
-      areas.push({ x: tx * tile, y: ty * tile, w: tile, h: tile, kind: 'storefront' });
+      // Storefront interact areas on all sides (perimeter of its collision rect)
+      if (this.storefrontCollision) {
+        const s = this.storefrontCollision;
+        const startTx = Math.floor(s.x / tile);
+        const endTx = Math.floor((s.x + s.w - 1) / tile);
+        const startTy = Math.floor(s.y / tile);
+        const endTy = Math.floor((s.y + s.h - 1) / tile);
+        // Top and bottom rows
+        for (let txi = startTx; txi <= endTx; txi++) {
+          areas.push({ x: txi * tile, y: startTy * tile, w: tile, h: tile, kind: 'storefront' });
+          areas.push({ x: txi * tile, y: endTy * tile, w: tile, h: tile, kind: 'storefront' });
+        }
+        // Left and right columns
+        for (let tyi = startTy; tyi <= endTy; tyi++) {
+          areas.push({ x: startTx * tile, y: tyi * tile, w: tile, h: tile, kind: 'storefront' });
+          areas.push({ x: endTx * tile, y: tyi * tile, w: tile, h: tile, kind: 'storefront' });
+        }
+      }
     }
     if (this.isInterior && this.worldMap) {
       // Exit interaction at Tiled tile (1,6)
@@ -649,7 +683,8 @@ export class GameEngine {
     } else if (near.kind === 'exitHouse') {
       this.exitHouse();
     } else if (near.kind === 'storefront') {
-      this.pushNotification('Storefront coming soon');
+      this.shopOpen = true;
+      this.shopSelected = 0;
     } else if (near.kind === 'bed') {
       this.sleepAtBed();
     } else if (near.kind === 'ship') {
@@ -1028,5 +1063,87 @@ export class GameEngine {
 
   public getAssets(): GameAssets {
     return this.gameAssets;
+  }
+
+  private handleShopInput(): void {
+    // Navigation
+    const up = this.keyboardInput.isKeyPressed('arrowup');
+    const down = this.keyboardInput.isKeyPressed('arrowdown');
+    if (up && !this.wasUpPressed) {
+      this.shopSelected = (this.shopSelected - 1 + this.shopItems.length) % this.shopItems.length;
+    }
+    if (down && !this.wasDownPressed) {
+      this.shopSelected = (this.shopSelected + 1) % this.shopItems.length;
+    }
+    this.wasUpPressed = up;
+    this.wasDownPressed = down;
+
+    // Purchase
+    const enter = this.keyboardInput.isKeyPressed('enter');
+    if (enter && !this.wasEnterPressed) {
+      const item = this.shopItems[this.shopSelected];
+      if (this.inventory.spendCoins(item.price)) {
+        this.addSeedsToInventory(item.plantType, 1);
+        this.pushNotification(`Bought ${item.plantType} seed`);
+      } else {
+        this.pushNotification('Not enough coins');
+      }
+    }
+    this.wasEnterPressed = enter;
+
+    // Close
+    const esc = this.keyboardInput.isKeyPressed('escape');
+    if (esc && !this.wasEscPressed) {
+      this.shopOpen = false;
+    }
+    this.wasEscPressed = esc;
+  }
+
+  private addSeedsToInventory(plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom', amount: number): void {
+    // Find slot with same seed type
+    let idx = this.inventorySlots.findIndex(it => it && it.kind === 'seed' && it.plantType === plantType);
+    if (idx < 0) idx = this.inventorySlots.findIndex(it => it === null);
+    if (idx < 0) { this.pushNotification('Inventory full'); return; }
+    const existing = this.inventorySlots[idx];
+    if (!existing) this.inventorySlots[idx] = { kind: 'seed', plantType, count: amount };
+    else (existing as any).count += amount;
+  }
+
+
+  public getShopView(): { open: boolean; items: Array<{ plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; price: number }>; selectedIndex: number; coins: number } {
+    return { open: this.shopOpen, items: this.shopItems, selectedIndex: this.shopSelected, coins: this.inventory.getCoins() };
+  }
+
+
+
+  // Randomize shop items for the current day/season
+  public refreshShopItems(_day?: number, seasonIndex?: number): void {
+    const catalog: Array<{ plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; basePrice: number }> = [
+      { plantType: 'eye', basePrice: 8 },
+      { plantType: 'tentacle', basePrice: 9 },
+      { plantType: 'jaws', basePrice: 10 },
+      { plantType: 'spike', basePrice: 11 },
+      { plantType: 'orb', basePrice: 14 },
+      { plantType: 'mushroom', basePrice: 6 },
+    ];
+    // Shuffle
+    for (let i = catalog.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [catalog[i], catalog[j]] = [catalog[j], catalog[i]];
+    }
+    const count = 3 + Math.floor(Math.random() * 2); // 3 or 4
+    const pick = catalog.slice(0, count);
+    const s = seasonIndex !== undefined ? ((seasonIndex % 4) + 4) % 4 : undefined;
+    this.shopItems = pick.map(p => {
+      let delta = Math.floor(Math.random() * 5) - 2; // -2..+2
+      if (s !== undefined) {
+        if (s === 0 && p.plantType === 'mushroom') delta -= 1; // spring
+        if (s === 2 && p.plantType === 'jaws') delta -= 1; // autumn
+        if (s === 1 && p.plantType === 'spike') delta += 1; // summer
+        if (s === 3 && p.plantType === 'orb') delta += 1;   // winter
+      }
+      return { plantType: p.plantType, price: Math.max(1, p.basePrice + delta) };
+    });
+    this.shopSelected = 0;
   }
 }

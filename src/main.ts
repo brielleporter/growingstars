@@ -6,6 +6,7 @@ import { GameEngine } from './core/GameEngine';
 import { renderHUD as renderWorldHUD, HUDState } from './modules/hud/HUDOverlay';
 import { renderHUD as renderPlayerHUD } from './modules/hud/PlayerHUD';
 import { renderInventory, InventoryItem } from './modules/hud/InventoryHUD';
+import { renderShop } from './modules/hud/ShopHUD';
 import { renderPromptAndNotifications } from './modules/hud/PromptHUD';
 
 // Initialize and start the game
@@ -97,6 +98,11 @@ if (document.readyState === 'loading') {
       if ((state.day - 1) % 10 === 0) state.seasonIndex = (state.seasonIndex + 1) % 4;
       // pick new day's weather
       currentDayWeather = chooseDailyWeather(state.seasonIndex);
+      // refresh shop items for new day
+      const geDay = (window as any).gameEngine as GameEngine | undefined;
+      if (geDay && (geDay as any).refreshShopItems) {
+        (geDay as any).refreshShopItems(state.day, state.seasonIndex);
+      }
     }
     // Weather for the day; disable weather while inside
     const ge = (window as any).gameEngine as GameEngine | undefined;
@@ -170,6 +176,11 @@ if (document.readyState === 'loading') {
           const overlay = (ge2 as any).getOverlayTexts();
           const invTopY = hudCanvas.height - marginBottom - slotSize - 10; // mirror InventoryHUD positioning
           renderPromptAndNotifications(ctx, overlay.prompt, overlay.notifications, { canvasWidth: hudCanvas.width, aboveY: invTopY - 8 });
+        }
+        // Shop overlay (centered)
+        if ((ge2 as any).getShopView) {
+          const shop = (ge2 as any).getShopView();
+          renderShop(ctx, shop, { canvasWidth: hudCanvas.width, canvasHeight: hudCanvas.height });
         }
       }
     }
