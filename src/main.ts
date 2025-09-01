@@ -8,17 +8,32 @@ import { renderHUD as renderPlayerHUD } from './modules/hud/PlayerHUD';
 import { renderInventory, InventoryItem } from './modules/hud/InventoryHUD';
 import { renderShop } from './modules/hud/ShopHUD';
 import { renderPromptAndNotifications } from './modules/hud/PromptHUD';
+import { TimeManager } from './modules/time/TimeManager';
 
 // Initialize and start the game
 const initializeGame = async (): Promise<void> => {
   try {
     const gameEngine = new GameEngine('game-canvas');
     
+    // Initialize time manager with accelerated time: 1 day = 40 seconds
+    const DAY_SECONDS = 40;
+    const timeManager = new TimeManager({
+      day: 1,
+      secondsIntoDay: 0,
+      dayDurationSeconds: DAY_SECONDS,
+      seasonIndex: 0,
+      weather: 'clear',
+    });
+    
+    // Connect time manager to game engine
+    gameEngine.setTimeManager(timeManager);
+    
     await gameEngine.initialize();
     gameEngine.start();
     
-    // Expose game engine to global scope for debugging
+    // Expose game engine and time manager to global scope
     (window as any).gameEngine = gameEngine;
+    (window as any).timeManager = timeManager;
     
     console.log('Growing Stars game started successfully!');
     console.log('Controls:');
@@ -42,9 +57,15 @@ if (document.readyState === 'loading') {
 // HUD demo overlay: separate canvas and loop (procedural, no assets)
 (() => {
   const hudCanvas = document.getElementById('hud-canvas') as HTMLCanvasElement | null;
-  if (!hudCanvas) return;
+  if (!hudCanvas) {
+    console.error('HUD canvas not found!');
+    return;
+  }
   const ctx = hudCanvas.getContext('2d');
-  if (!ctx) return;
+  if (!ctx) {
+    console.error('HUD canvas context not available!');
+    return;
+  }
 
   const resize = () => {
     hudCanvas.width = window.innerWidth;
@@ -53,17 +74,9 @@ if (document.readyState === 'loading') {
   resize();
   window.addEventListener('resize', resize);
 
-  // Simulated accelerated time: 1 day = 40 seconds
-  const DAY_SECONDS = 40;
-  let state: HUDState = {
-    day: 1,
-    secondsIntoDay: 0,
-    dayDurationSeconds: DAY_SECONDS,
-    seasonIndex: 0,
-    weather: 'clear',
-  };
   // Choose a persistent weather for each day (storms are relatively rare)
-  let currentDayWeather: 'clear' | 'cloud' | 'storm' = chooseDailyWeather(state.seasonIndex);
+  let currentDayWeather: 'clear' | 'cloud' | 'storm' = chooseDailyWeather(0);
+  let lastDay = 1; // Track the last day we processed
 
   let last = performance.now();
   let totalElapsed = 0;
@@ -89,27 +102,32 @@ if (document.readyState === 'loading') {
     last = now;
     totalElapsed += dt * 1000;
 
-    // Advance time
-    state.secondsIntoDay += dt;
-    if (state.secondsIntoDay >= state.dayDurationSeconds) {
-      state.secondsIntoDay -= state.dayDurationSeconds;
-      state.day += 1;
-      // advance season every 10 days
-      if ((state.day - 1) % 10 === 0) state.seasonIndex = (state.seasonIndex + 1) % 4;
-      // pick new day's weather
-      currentDayWeather = chooseDailyWeather(state.seasonIndex);
-      // refresh shop items for new day
-      const geDay = (window as any).gameEngine as GameEngine | undefined;
-      if (geDay && (geDay as any).refreshShopItems) {
-        (geDay as any).refreshShopItems(state.day, state.seasonIndex);
-      }
+    // Update time manager
+    const tm = (window as any).timeManager as TimeManager | undefined;
+    if (!tm) {
+      requestAnimationFrame(loop);
+      return;
     }
-    // Weather for the day; disable weather while inside
+    
+    tm.updateTime(dt);
+    const state = tm.getState();
+    
+    // Check for day changes to update weather
+    const currentDay = state.day;
+    if (currentDay !== lastDay) {
+      currentDayWeather = chooseDailyWeather(state.seasonIndex);
+      lastDay = currentDay;
+    }
+    
+    // Set weather based on interior status
     const ge = (window as any).gameEngine as GameEngine | undefined;
-    const inside = !!ge && typeof (ge as any).isInteriorScene === 'function' ? ge.isInteriorScene() : false;
-    state.weather = inside ? 'clear' : currentDayWeather;
-    // Expose current weather globally so the game can react (e.g., rain waters plants)
-    (window as any).currentWeather = state.weather;
+    const inside = ge && ge.isInteriorScene ? ge.isInteriorScene() : false;
+    const currentWeather = inside ? 'clear' : currentDayWeather;
+    tm.setWeather(currentWeather);
+
+    // Clear canvas
+    ctx.clearRect(0, 0, hudCanvas.width, hudCanvas.height);
+
 
     renderWorldHUD(ctx, state, {
       canvasWidth: hudCanvas.width,

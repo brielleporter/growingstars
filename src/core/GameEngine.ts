@@ -19,6 +19,8 @@ import { PlayerCharacterRenderer } from '../modules/rendering/PlayerCharacterRen
 import { MapLoader, LoadedMap } from '../modules/tilemap/MapLoader';
 import { TilemapRenderer } from '../modules/rendering/TilemapRenderer';
 import { Camera } from '../modules/rendering/Camera';
+import { TimeManager } from '../modules/time/TimeManager';
+import { StaminaSystem } from '../modules/player/StaminaSystem';
 
 export class GameEngine {
   private canvas: HTMLCanvasElement;
@@ -79,6 +81,9 @@ export class GameEngine {
   private wasDownPressed = false;
   private wasEnterPressed = false;
   private wasEscPressed = false;
+  // Player systems
+  private timeManager?: TimeManager;
+  private staminaSystem?: StaminaSystem;
 
   constructor(canvasElementId: string) {
     const canvas = document.getElementById(canvasElementId) as HTMLCanvasElement;
@@ -136,6 +141,27 @@ export class GameEngine {
     
     // Handle window resize
     window.addEventListener('resize', resizeCanvas);
+  }
+
+  public setTimeManager(timeManager: TimeManager): void {
+    this.timeManager = timeManager;
+    this.staminaSystem = new StaminaSystem(timeManager);
+    
+    // Setup stamina system callbacks
+    this.staminaSystem.onCoinsChanged((amount) => {
+      if (amount < 0) {
+        const currentCoins = this.inventory.getCoins();
+        if (currentCoins >= Math.abs(amount)) {
+          this.inventory.modifyCoins(amount);
+        } else {
+          this.pushNotification('You would have lost coins but have none.');
+        }
+      }
+    });
+    
+    this.staminaSystem.onNotificationRequested((message) => {
+      this.pushNotification(message);
+    });
   }
 
   public async initialize(): Promise<void> {
@@ -249,22 +275,30 @@ export class GameEngine {
   }
 
   // HUD snapshot for player resources
-  public getHUDSnapshot(): { water: number; maxWater: number; seeds: number; seedType: string; coins: number } {
+  public getHUDSnapshot(): { water: number; maxWater: number; seeds: number; seedType: string; coins: number; stamina: number; maxStamina: number } {
     const water = this.inventory.getWater();
     const maxWater = this.inventory.getWaterCapacity();
     const coins = this.inventory.getState().coins;
+    const staminaState = this.staminaSystem?.getState() ?? { current: 100, maximum: 100 };
     return {
       water,
       maxWater,
       seeds: this.hudSeedCount,
       seedType: this.hudSeedType,
       coins,
+      stamina: staminaState.current,
+      maxStamina: staminaState.maximum,
     };
   }
 
   public getInventoryView(): { items: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; count: number } | null>; selectedIndex: number } {
     return { items: this.inventorySlots, selectedIndex: this.selectedSlot };
   }
+
+  public isInteriorScene(): boolean {
+    return this.isInterior;
+  }
+
 
   private moveSelection(dir: number): void {
     const n = this.inventorySlots.length;
@@ -554,6 +588,9 @@ export class GameEngine {
     if (this.isRainingOutside()) {
       this.plantManagement.waterAllUnwatered();
     }
+
+    // Update stamina system
+    this.staminaSystem?.update();
 
     // Update fade transition state
     if (this.fadeTransition.active) {
@@ -1017,9 +1054,9 @@ export class GameEngine {
   }
 
   private sleepAtBed(): void {
-    // Simple fade and notification for now
     this.startFadeTransition(() => {
-      this.pushNotification('You feel rested');
+      // Use the stamina system to handle sleep
+      this.staminaSystem?.sleep();
     }, 800);
   }
 
@@ -1056,10 +1093,6 @@ export class GameEngine {
     };
   }
 
-  // Expose whether the player is inside the interior scene
-  public isInteriorScene(): boolean {
-    return this.isInterior;
-  }
 
   public getAssets(): GameAssets {
     return this.gameAssets;

@@ -64,6 +64,10 @@ export class InventorySystem {
     return true;
   }
 
+  public modifyCoins(amount: number): void {
+    this.coins = Math.max(0, this.coins + amount);
+  }
+
   public getState(): InventoryState {
     return { counts: { ...this.counts }, coins: this.coins, capacity: this.capacity };
   }

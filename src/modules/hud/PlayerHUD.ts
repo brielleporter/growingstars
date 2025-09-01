@@ -4,6 +4,8 @@ export interface PlayerHUDState {
   seeds: number;      // count
   seedType: string;   // label
   coins: number;      // count
+  stamina: number;    // 0..maxStamina
+  maxStamina: number; // e.g., 100
 }
 
 export interface PlayerHUDOptions {
@@ -18,9 +20,9 @@ export function renderHUD(ctx: CanvasRenderingContext2D, state: PlayerHUDState, 
   const panelW = opts.panelWidth ?? 260;
   // Calculate panel height based on rows
   const rowH = 32;
-  const innerPad = 12;
-  const rows = 2; // water, coins (seeds moved to bottom bar)
-  const panelH = innerPad * 2 + rows * rowH + (rows - 1) * 10;
+  const innerPad = 16; // Increased from 12 to 16 for more spacing from edges
+  const rows = 3; // stamina, water, coins (seeds moved to bottom bar)
+  const panelH = innerPad * 2 + 8 + rows * rowH + (rows - 1) * 16; // Added 8px for extra top spacing
 
   const x = margin;
   const y = margin;
@@ -40,12 +42,16 @@ export function renderHUD(ctx: CanvasRenderingContext2D, state: PlayerHUDState, 
   ctx.shadowBlur = 0;
   ctx.restore();
 
-  let cy = y + innerPad;
-  // 1) Water bar (turquoise segmented battery)
-  drawWaterBar(ctx, x + innerPad, cy, panelW - innerPad * 2, rowH - 2, state.water, state.maxWater);
-  cy += rowH + 10;
+  let cy = y + innerPad + 8; // Add extra 8px spacing from top
+  // 1) Stamina bar (yellow progress bar) - moved to top with more spacing
+  drawStaminaBar(ctx, x + innerPad, cy, panelW - innerPad * 2, rowH - 2, state.stamina, state.maxStamina);
+  cy += rowH + 16; // Increased spacing
 
-  // 2) Coin inventory (coin icon + amount)
+  // 2) Water bar (turquoise segmented battery)
+  drawWaterBar(ctx, x + innerPad, cy, panelW - innerPad * 2, rowH - 2, state.water, state.maxWater);
+  cy += rowH + 16; // Increased spacing
+
+  // 3) Coin inventory (coin icon + amount)
   drawCoinsRow(ctx, x + innerPad, cy, panelW - innerPad * 2, rowH - 2, state.coins);
 }
 
@@ -84,6 +90,65 @@ function drawWaterBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: nu
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
   ctx.fillText(`Water ${filled}/${segments}`, x, y - 4);
+  ctx.restore();
+}
+
+function drawStaminaBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, stamina: number, maxStamina: number): void {
+  const fillRatio = Math.max(0, Math.min(1, stamina / maxStamina));
+  
+  // Background bar
+  ctx.save();
+  roundRectPath(ctx, x - 2, y - 2, w + 4, h + 4, 6);
+  ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  
+  // Background fill
+  roundRectPath(ctx, x, y, w, h, 4);
+  ctx.fillStyle = 'rgba(255, 215, 0, 0.1)';
+  ctx.fill();
+  
+  // Foreground fill based on stamina level (smooth continuous fill)
+  if (fillRatio > 0) {
+    const fillW = w * fillRatio;
+    
+    // Use smooth clipping for continuous appearance
+    ctx.save();
+    roundRectPath(ctx, x, y, w, h, 4);
+    ctx.clip();
+    
+    // Create full-width rectangle, but clipped to fillW
+    roundRectPath(ctx, x, y, fillW, h, 4);
+    
+    // Color based on stamina level
+    let fillColor = 'rgba(255, 215, 0, 0.8)'; // Golden yellow
+    if (fillRatio < 0.25) {
+      fillColor = 'rgba(255, 100, 100, 0.8)'; // Red when very low
+    } else if (fillRatio < 0.5) {
+      fillColor = 'rgba(255, 165, 0, 0.8)'; // Orange when low
+    }
+    
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    
+    // Highlight gradient for smooth appearance
+    const grad = ctx.createLinearGradient(x, y, x, y + h);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
+    grad.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0.1)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, y, fillW, h);
+    
+    ctx.restore();
+  }
+  
+  // Label with more space from edge
+  ctx.fillStyle = '#ffd700';
+  ctx.font = '12px monospace';
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  const staminaText = `Stamina ${Math.round(stamina)}/${Math.round(maxStamina)}`;
+  ctx.fillText(staminaText, x, y - 8); // Moved down from y-4 to y-8 for more space
   ctx.restore();
 }
 
