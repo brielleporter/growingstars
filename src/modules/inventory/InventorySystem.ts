@@ -2,14 +2,14 @@ import type { PlantType } from '../../types/plantSystem.types';
 import type { InventoryCounts, InventoryState } from '../../types/inventory.types';
 
 export class InventorySystem {
-  private counts: InventoryCounts;
-  private coins: number;
-  private capacity?: number;
-  private water: number;
-  private waterCapacity: number;
+  private plantCounts: InventoryCounts;
+  private totalCoins: number;
+  private inventoryCapacity?: number;
+  private currentWaterAmount: number;
+  private maximumWaterCapacity: number;
 
-  constructor(initialCoins = 0, capacity?: number, initialWater = 10, waterCapacity = 10) {
-    this.counts = {
+  constructor(startingCoins = 0, inventoryLimit?: number, startingWater = 10, maxWaterCapacity = 10) {
+    this.plantCounts = {
       eye: 0,
       tentacle: 0,
       jaws: 0,
@@ -17,68 +17,68 @@ export class InventorySystem {
       orb: 0,
       mushroom: 0,
     };
-    this.coins = initialCoins;
-    this.capacity = capacity;
-    this.water = Math.max(0, Math.min(initialWater, waterCapacity));
-    this.waterCapacity = waterCapacity;
+    this.totalCoins = startingCoins;
+    this.inventoryCapacity = inventoryLimit;
+    this.currentWaterAmount = Math.max(0, Math.min(startingWater, maxWaterCapacity));
+    this.maximumWaterCapacity = maxWaterCapacity;
   }
 
-  public addPlant(type: PlantType): boolean {
-    if (this.capacity !== undefined && this.getTotalCount() >= this.capacity) {
+  public addPlant(plantType: PlantType): boolean {
+    if (this.inventoryCapacity !== undefined && this.getTotalPlantCount() >= this.inventoryCapacity) {
       return false;
     }
-    this.counts[type] = (this.counts[type] ?? 0) + 1;
+    this.plantCounts[plantType] = (this.plantCounts[plantType] ?? 0) + 1;
     return true;
   }
 
-  public getCount(type: PlantType): number {
-    return this.counts[type] ?? 0;
+  public getPlantCount(plantType: PlantType): number {
+    return this.plantCounts[plantType] ?? 0;
   }
 
-  public getTotalCount(): number {
-    return Object.values(this.counts).reduce((a, b) => a + b, 0);
+  public getTotalPlantCount(): number {
+    return Object.values(this.plantCounts).reduce((totalCount, currentCount) => totalCount + currentCount, 0);
   }
 
-  public sellAll(prices: Record<PlantType, number>): { coinsGained: number } {
-    let gained = 0;
-    (Object.keys(this.counts) as PlantType[]).forEach((k) => {
-      const qty = this.counts[k] ?? 0;
-      if (qty > 0) {
-        const price = prices[k] ?? 0;
-        gained += qty * price;
-        this.counts[k] = 0;
+  public sellAllPlants(plantPrices: Record<PlantType, number>): { coinsGained: number } {
+    let totalCoinsGained = 0;
+    (Object.keys(this.plantCounts) as PlantType[]).forEach((plantType) => {
+      const plantQuantity = this.plantCounts[plantType] ?? 0;
+      if (plantQuantity > 0) {
+        const pricePerPlant = plantPrices[plantType] ?? 0;
+        totalCoinsGained += plantQuantity * pricePerPlant;
+        this.plantCounts[plantType] = 0;
       }
     });
-    this.coins += gained;
-    return { coinsGained: gained };
+    this.totalCoins += totalCoinsGained;
+    return { coinsGained: totalCoinsGained };
   }
 
   public getCoins(): number {
-    return this.coins;
+    return this.totalCoins;
   }
 
-  public spendCoins(amount: number): boolean {
-    if (amount <= 0) return true;
-    if (this.coins < amount) return false;
-    this.coins -= amount;
+  public spendCoins(coinAmount: number): boolean {
+    if (coinAmount <= 0) return true;
+    if (this.totalCoins < coinAmount) return false;
+    this.totalCoins -= coinAmount;
     return true;
   }
 
-  public modifyCoins(amount: number): void {
-    this.coins = Math.max(0, this.coins + amount);
+  public modifyCoins(coinAmountChange: number): void {
+    this.totalCoins = Math.max(0, this.totalCoins + coinAmountChange);
   }
 
   public getState(): InventoryState {
-    return { counts: { ...this.counts }, coins: this.coins, capacity: this.capacity };
+    return { counts: { ...this.plantCounts }, coins: this.totalCoins, capacity: this.inventoryCapacity };
   }
 
   // Water can APIs
-  public getWater(): number { return this.water; }
-  public getWaterCapacity(): number { return this.waterCapacity; }
-  public refillWater(): void { this.water = this.waterCapacity; }
-  public useWater(units = 1): boolean {
-    if (this.water < units) return false;
-    this.water -= units;
+  public getWater(): number { return this.currentWaterAmount; }
+  public getWaterCapacity(): number { return this.maximumWaterCapacity; }
+  public refillWater(): void { this.currentWaterAmount = this.maximumWaterCapacity; }
+  public useWater(waterUnits = 1): boolean {
+    if (this.currentWaterAmount < waterUnits) return false;
+    this.currentWaterAmount -= waterUnits;
     return true;
   }
 }

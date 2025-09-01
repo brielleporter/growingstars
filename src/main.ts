@@ -3,12 +3,17 @@
  */
 
 import { GameEngine } from './core/GameEngine';
-import { renderHUD as renderWorldHUD, HUDState } from './modules/hud/HUDOverlay';
+import { renderHUD as renderWorldHUD } from './modules/hud/HUDOverlay';
 import { renderHUD as renderPlayerHUD } from './modules/hud/PlayerHUD';
 import { renderInventory, InventoryItem } from './modules/hud/InventoryHUD';
 import { renderShop } from './modules/hud/ShopHUD';
 import { renderPromptAndNotifications } from './modules/hud/PromptHUD';
 import { TimeManager } from './modules/time/TimeManager';
+
+interface WindowWithGameEngines extends Window {
+  gameEngine?: GameEngine;
+  timeManager?: TimeManager;
+}
 
 // Initialize and start the game
 const initializeGame = async (): Promise<void> => {
@@ -16,11 +21,11 @@ const initializeGame = async (): Promise<void> => {
     const gameEngine = new GameEngine('game-canvas');
     
     // Initialize time manager with accelerated time: 1 day = 40 seconds
-    const DAY_SECONDS = 40;
+    const SECONDS_PER_DAY = 40;
     const timeManager = new TimeManager({
       day: 1,
       secondsIntoDay: 0,
-      dayDurationSeconds: DAY_SECONDS,
+      dayDurationSeconds: SECONDS_PER_DAY,
       seasonIndex: 0,
       weather: 'clear',
     });
@@ -31,9 +36,14 @@ const initializeGame = async (): Promise<void> => {
     await gameEngine.initialize();
     gameEngine.start();
     
-    // Expose game engine and time manager to global scope
-    (window as any).gameEngine = gameEngine;
-    (window as any).timeManager = timeManager;
+    // Expose game engine and time manager to global scope for debugging
+    interface WindowWithGameEngines extends Window {
+      gameEngine?: GameEngine;
+      timeManager?: TimeManager;
+    }
+    const windowWithEngines = window as WindowWithGameEngines;
+    windowWithEngines.gameEngine = gameEngine;
+    windowWithEngines.timeManager = timeManager;
     
     console.log('Growing Stars game started successfully!');
     console.log('Controls:');
@@ -76,10 +86,10 @@ if (document.readyState === 'loading') {
 
   // Choose a persistent weather for each day (storms are relatively rare)
   let currentDayWeather: 'clear' | 'cloud' | 'storm' = chooseDailyWeather(0);
-  let lastDay = 1; // Track the last day we processed
+  let lastProcessedDay = 1; // Track the last day we processed
 
-  let last = performance.now();
-  let totalElapsed = 0;
+  let previousFrameTime = performance.now();
+  let totalElapsedTime = 0;
 
   function chooseDailyWeather(seasonIndex: number): 'clear' | 'cloud' | 'storm' {
     // Base weights: clear (0.6), cloud (0.32), storm (0.08)
@@ -96,113 +106,118 @@ if (document.readyState === 'loading') {
     return 'clear';
   }
 
-  const loop = () => {
-    const now = performance.now();
-    const dt = (now - last) / 1000;
-    last = now;
-    totalElapsed += dt * 1000;
+  const renderLoop = () => {
+    const currentFrameTime = performance.now();
+    const deltaTimeSeconds = (currentFrameTime - previousFrameTime) / 1000;
+    previousFrameTime = currentFrameTime;
+    totalElapsedTime += deltaTimeSeconds * 1000;
 
     // Update time manager
-    const tm = (window as any).timeManager as TimeManager | undefined;
-    if (!tm) {
-      requestAnimationFrame(loop);
+    const windowWithEngines = window as WindowWithGameEngines;
+    const timeManager = windowWithEngines.timeManager;
+    if (!timeManager) {
+      requestAnimationFrame(renderLoop);
       return;
     }
     
-    tm.updateTime(dt);
-    const state = tm.getState();
+    timeManager.updateTime(deltaTimeSeconds);
+    const currentTimeState = timeManager.getState();
     
     // Check for day changes to update weather
-    const currentDay = state.day;
-    if (currentDay !== lastDay) {
-      currentDayWeather = chooseDailyWeather(state.seasonIndex);
-      lastDay = currentDay;
+    const currentDayNumber = currentTimeState.day;
+    if (currentDayNumber !== lastProcessedDay) {
+      currentDayWeather = chooseDailyWeather(currentTimeState.seasonIndex);
+      lastProcessedDay = currentDayNumber;
     }
     
     // Set weather based on interior status
-    const ge = (window as any).gameEngine as GameEngine | undefined;
-    const inside = ge && ge.isInteriorScene ? ge.isInteriorScene() : false;
-    const currentWeather = inside ? 'clear' : currentDayWeather;
-    tm.setWeather(currentWeather);
+    const gameEngine = windowWithEngines.gameEngine;
+    const isInsideBuilding = gameEngine && gameEngine.isInteriorScene ? gameEngine.isInteriorScene() : false;
+    const actualWeather = isInsideBuilding ? 'clear' : currentDayWeather;
+    timeManager.setWeather(actualWeather);
 
     // Clear canvas
     ctx.clearRect(0, 0, hudCanvas.width, hudCanvas.height);
 
 
-    renderWorldHUD(ctx, state, {
+    renderWorldHUD(ctx, currentTimeState, {
       canvasWidth: hudCanvas.width,
       canvasHeight: hudCanvas.height,
       margin: 16,
-      disableDarkening: inside,
+      disableDarkening: isInsideBuilding,
     });
 
     // Player resource HUD (top-left)
-    const ge2 = (window as any).gameEngine as GameEngine | undefined;
-    if (ge2 && typeof (ge2 as any).getHUDSnapshot === 'function') {
-      const snap = ge2.getHUDSnapshot();
-      renderPlayerHUD(ctx, snap, { canvasWidth: hudCanvas.width, canvasHeight: hudCanvas.height, margin: 16 });
-      if (typeof (ge2 as any).getInventoryView === 'function') {
-        const inv = (ge2 as any).getInventoryView();
-        const slotSize = 32, spacing = 8, marginBottom = 16;
-        renderInventory(ctx, inv.items as InventoryItem[], inv.selectedIndex, { slotSize, spacing, marginBottom }, (ictx, x, y, size, item) => {
+    const gameEngineForHUD = windowWithEngines.gameEngine;
+    if (gameEngineForHUD && typeof gameEngineForHUD.getHUDSnapshot === 'function') {
+      const hudSnapshot = gameEngineForHUD.getHUDSnapshot();
+      renderPlayerHUD(ctx, hudSnapshot, { canvasWidth: hudCanvas.width, canvasHeight: hudCanvas.height, margin: 16 });
+      if (typeof gameEngineForHUD.getInventoryView === 'function') {
+        const inventoryView = gameEngineForHUD.getInventoryView();
+        const inventorySlotSize = 32;
+        const inventorySlotSpacing = 8;
+        const inventoryMarginBottom = 16;
+        renderInventory(ctx, inventoryView.items as InventoryItem[], inventoryView.selectedIndex, { slotSize: inventorySlotSize, spacing: inventorySlotSpacing, marginBottom: inventoryMarginBottom }, (itemContext, xPosition, yPosition, slotSize, inventoryItem) => {
           // Draw tiny plant icon for seeds using game assets
-          if (item.kind === 'seed') {
-            const assets = (ge2 as any).getAssets?.() ?? (window as any).gameEngine?.getAssets?.();
-            const img = assets?.plantSprites?.[item.plantType];
-            if (img && img.complete && img.naturalWidth > 0) {
-              const pad = 4;
-              const dw = size - pad * 2;
-              const dh = size - pad * 2;
-              ictx.save();
-              ictx.imageSmoothingEnabled = false;
-              ictx.drawImage(img, x + pad, y + pad, dw, dh);
-              ictx.restore();
+          if (inventoryItem.kind === 'seed') {
+            const gameAssets = gameEngineForHUD.getAssets?.() ?? windowWithEngines.gameEngine?.getAssets?.();
+            const plantSpriteImage = gameAssets?.plantSprites?.[inventoryItem.plantType];
+            if (plantSpriteImage && plantSpriteImage.complete && plantSpriteImage.naturalWidth > 0) {
+              const iconPadding = 4;
+              const iconWidth = slotSize - iconPadding * 2;
+              const iconHeight = slotSize - iconPadding * 2;
+              itemContext.save();
+              itemContext.imageSmoothingEnabled = false;
+              itemContext.drawImage(plantSpriteImage, xPosition + iconPadding, yPosition + iconPadding, iconWidth, iconHeight);
+              itemContext.restore();
               return;
             }
             // Fallback: draw a procedural sprout icon
-            const s = Math.min(18, size * 0.7);
-            const sx = x + size * 0.16, sy = y + size * 0.14;
-            ictx.save();
-            ictx.strokeStyle = '#6eff6e';
-            ictx.lineWidth = 2;
-            ictx.beginPath();
-            ictx.moveTo(sx + s * 0.5, sy + s);
-            ictx.quadraticCurveTo(sx + s * 0.55, sy + s * 0.6, sx + s * 0.5, sy + s * 0.3);
-            ictx.stroke();
-            ictx.fillStyle = '#a4ff7a';
-            ictx.beginPath();
-            ictx.ellipse(sx + s * 0.38, sy + s * 0.42, s * 0.18, s * 0.10, -0.6, 0, Math.PI * 2);
-            ictx.ellipse(sx + s * 0.62, sy + s * 0.40, s * 0.18, s * 0.10, 0.6, 0, Math.PI * 2);
-            ictx.fill();
-            ictx.restore();
+            const sproutIconSize = Math.min(18, slotSize * 0.7);
+            const sproutStartX = xPosition + slotSize * 0.16;
+            const sproutStartY = yPosition + slotSize * 0.14;
+            itemContext.save();
+            itemContext.strokeStyle = '#6eff6e';
+            itemContext.lineWidth = 2;
+            itemContext.beginPath();
+            itemContext.moveTo(sproutStartX + sproutIconSize * 0.5, sproutStartY + sproutIconSize);
+            itemContext.quadraticCurveTo(sproutStartX + sproutIconSize * 0.55, sproutStartY + sproutIconSize * 0.6, sproutStartX + sproutIconSize * 0.5, sproutStartY + sproutIconSize * 0.3);
+            itemContext.stroke();
+            itemContext.fillStyle = '#a4ff7a';
+            itemContext.beginPath();
+            itemContext.ellipse(sproutStartX + sproutIconSize * 0.38, sproutStartY + sproutIconSize * 0.42, sproutIconSize * 0.18, sproutIconSize * 0.10, -0.6, 0, Math.PI * 2);
+            itemContext.ellipse(sproutStartX + sproutIconSize * 0.62, sproutStartY + sproutIconSize * 0.40, sproutIconSize * 0.18, sproutIconSize * 0.10, 0.6, 0, Math.PI * 2);
+            itemContext.fill();
+            itemContext.restore();
             return;
           }
           // Tools: simple glyph
-          ictx.save();
-          ictx.strokeStyle = '#89ffe8';
-          ictx.lineWidth = 2;
-          const cx = x + size * 0.5, cy = y + size * 0.5;
-          ictx.beginPath();
-          ictx.arc(cx - 4, cy - 6, 5, Math.PI * 0.3, Math.PI * 1.7);
-          ictx.moveTo(cx - 1, cy - 2);
-          ictx.lineTo(cx + 6, cy + 6);
-          ictx.stroke();
-          ictx.restore();
+          itemContext.save();
+          itemContext.strokeStyle = '#89ffe8';
+          itemContext.lineWidth = 2;
+          const toolIconCenterX = xPosition + slotSize * 0.5;
+          const toolIconCenterY = yPosition + slotSize * 0.5;
+          itemContext.beginPath();
+          itemContext.arc(toolIconCenterX - 4, toolIconCenterY - 6, 5, Math.PI * 0.3, Math.PI * 1.7);
+          itemContext.moveTo(toolIconCenterX - 1, toolIconCenterY - 2);
+          itemContext.lineTo(toolIconCenterX + 6, toolIconCenterY + 6);
+          itemContext.stroke();
+          itemContext.restore();
         });
         // Prompt and notifications above the inventory bar
-        if (typeof (ge2 as any).getOverlayTexts === 'function') {
-          const overlay = (ge2 as any).getOverlayTexts();
-          const invTopY = hudCanvas.height - marginBottom - slotSize - 10; // mirror InventoryHUD positioning
-          renderPromptAndNotifications(ctx, overlay.prompt, overlay.notifications, { canvasWidth: hudCanvas.width, aboveY: invTopY - 8 });
+        if (typeof gameEngineForHUD.getOverlayTexts === 'function') {
+          const overlayTexts = gameEngineForHUD.getOverlayTexts();
+          const inventoryTopY = hudCanvas.height - inventoryMarginBottom - inventorySlotSize - 10; // mirror InventoryHUD positioning
+          renderPromptAndNotifications(ctx, overlayTexts.prompt, overlayTexts.notifications, { canvasWidth: hudCanvas.width, aboveY: inventoryTopY - 8 });
         }
         // Shop overlay (centered)
-        if ((ge2 as any).getShopView) {
-          const shop = (ge2 as any).getShopView();
-          renderShop(ctx, shop, { canvasWidth: hudCanvas.width, canvasHeight: hudCanvas.height });
+        if (gameEngineForHUD.getShopView) {
+          const shopView = gameEngineForHUD.getShopView();
+          renderShop(ctx, shopView, { canvasWidth: hudCanvas.width, canvasHeight: hudCanvas.height });
         }
       }
     }
-    requestAnimationFrame(loop);
+    requestAnimationFrame(renderLoop);
   };
-  requestAnimationFrame(loop);
+  requestAnimationFrame(renderLoop);
 })();

@@ -18,28 +18,28 @@ export interface StaminaConfig {
 }
 
 export class StaminaSystem {
-  private state: StaminaState;
-  private config: StaminaConfig;
+  private staminaState: StaminaState;
+  private staminaConfig: StaminaConfig;
   private timeManager: TimeManager;
-  private onCoinsPenalty?: (amount: number) => void;
-  private onNotification?: (message: string) => void;
+  private onCoinsPenaltyCallback?: (amount: number) => void;
+  private onNotificationCallback?: (message: string) => void;
 
   constructor(
     timeManager: TimeManager,
-    config: Partial<StaminaConfig> = {}
+    configurationOverrides: Partial<StaminaConfig> = {}
   ) {
     this.timeManager = timeManager;
-    this.config = {
+    this.staminaConfig = {
       maxStamina: 100,
       depletionRate: 100 / 17, // Fully depleted from 7am to midnight (17 hours) - used in continuous calculation
       sleepReminderHour: 22, // 10pm
       midnightPenalty: 10,
-      ...config
+      ...configurationOverrides
     };
     
-    this.state = {
-      current: this.config.maxStamina,
-      maximum: this.config.maxStamina,
+    this.staminaState = {
+      current: this.staminaConfig.maxStamina,
+      maximum: this.staminaConfig.maxStamina,
       lastSleepTime: 7, // Start at 7am on day 1 (7 total hours)
       hasSleptToday: false,
       showedSleepReminder: false,
@@ -49,118 +49,119 @@ export class StaminaSystem {
   }
 
   public getState(): StaminaState {
-    return { ...this.state };
+    return { ...this.staminaState };
   }
 
-  public onCoinsChanged(callback: (amount: number) => void): void {
-    this.onCoinsPenalty = callback;
+  public onCoinsChanged(coinsChangeCallback: (amount: number) => void): void {
+    this.onCoinsPenaltyCallback = coinsChangeCallback;
   }
 
-  public onNotificationRequested(callback: (message: string) => void): void {
-    this.onNotification = callback;
+  public onNotificationRequested(notificationCallback: (message: string) => void): void {
+    this.onNotificationCallback = notificationCallback;
   }
 
   public update(): void {
-    const currentTime = this.timeManager.getCurrentGameTime();
+    const currentGameTime = this.timeManager.getCurrentGameTime();
     
-    this.resetDailyFlags(currentTime);
-    this.updateStaminaDepletion(currentTime);
-    this.checkSleepReminder(currentTime);
-    this.checkAutoSleep(currentTime);
+    this.resetDailyFlags(currentGameTime);
+    this.updateStaminaDepletion(currentGameTime);
+    this.checkSleepReminder(currentGameTime);
+    this.checkAutoSleep(currentGameTime);
   }
 
   public sleep(): void {
-    const currentTime = this.timeManager.getCurrentGameTime();
+    const currentGameTime = this.timeManager.getCurrentGameTime();
     
     // Determine if we need to advance to next day
-    const needsNextDay = currentTime.hour >= 7;
+    const shouldAdvanceToNextDay = currentGameTime.hour >= 7;
     
     // Set time to 7am
-    this.timeManager.setTimeToHour(7, needsNextDay);
+    this.timeManager.setTimeToHour(7, shouldAdvanceToNextDay);
     
     // Restore stamina
-    this.state.current = this.state.maximum;
+    this.staminaState.current = this.staminaState.maximum;
     
     // Update sleep tracking with continuous time
-    const newTimeState = this.timeManager.getState();
-    const newDayProgress = newTimeState.secondsIntoDay / newTimeState.dayDurationSeconds;
-    const newHourFloat = newDayProgress * 24;
-    this.state.lastSleepTime = (newTimeState.day - 1) * 24 + newHourFloat;
-    this.state.hasSleptToday = true;
-    this.state.showedSleepReminder = false;
+    const updatedTimeState = this.timeManager.getState();
+    const newDayProgressRatio = updatedTimeState.secondsIntoDay / updatedTimeState.dayDurationSeconds;
+    const newHourAsFloat = newDayProgressRatio * 24;
+    this.staminaState.lastSleepTime = (updatedTimeState.day - 1) * 24 + newHourAsFloat;
+    this.staminaState.hasSleptToday = true;
+    this.staminaState.showedSleepReminder = false;
     
-    this.onNotification?.('You wake up feeling refreshed at 7am!');
+    this.onNotificationCallback?.('You wake up feeling refreshed at 7am!');
   }
 
-  private resetDailyFlags(currentTime: GameTime): void {
+  private resetDailyFlags(currentGameTime: GameTime): void {
     // Reset daily flags when a new day starts
     // Check if we've moved to a new day since last sleep
-    const currentDay = currentTime.day;
-    const lastSleepDay = Math.floor((this.state.lastSleepTime - 7) / 24) + 1; // Adjust for 7am start
+    const currentDayNumber = currentGameTime.day;
+    const lastSleepDayNumber = Math.floor((this.staminaState.lastSleepTime - 7) / 24) + 1; // Adjust for 7am start
     
-    if (currentDay > lastSleepDay) {
-      this.state.hasSleptToday = false;
-      this.state.showedSleepReminder = false;
+    if (currentDayNumber > lastSleepDayNumber) {
+      this.staminaState.hasSleptToday = false;
+      this.staminaState.showedSleepReminder = false;
     }
   }
 
-  private updateStaminaDepletion(currentTime: GameTime): void {
+  private updateStaminaDepletion(_currentGameTime: GameTime): void {
     // Get continuous time from TimeManager for smooth depletion
-    const timeState = this.timeManager.getState();
-    const currentDayProgress = timeState.secondsIntoDay / timeState.dayDurationSeconds; // 0-1
-    const currentHourFloat = currentDayProgress * 24; // 0-24 with decimals
-    const currentTotalHoursFloat = (timeState.day - 1) * 24 + currentHourFloat;
+    const currentTimeState = this.timeManager.getState();
+    const currentDayProgressRatio = currentTimeState.secondsIntoDay / currentTimeState.dayDurationSeconds; // 0-1
+    const currentHourAsFloat = currentDayProgressRatio * 24; // 0-24 with decimals
+    const totalHoursSinceGameStart = (currentTimeState.day - 1) * 24 + currentHourAsFloat;
     
     // Deplete stamina based on continuous time since last sleep
-    const hoursSinceLastSleep = currentTotalHoursFloat - this.state.lastSleepTime;
-    const expectedStamina = Math.max(0, this.state.maximum - (hoursSinceLastSleep * (100 / 17))); // Back to hourly rate
-    const newStamina = Math.max(0, Math.min(this.state.maximum, expectedStamina));
+    const hoursAwakeSinceLastSleep = totalHoursSinceGameStart - this.staminaState.lastSleepTime;
+    const staminaDepletionRate = 100 / 17; // 100 stamina over 17 hours (7am to midnight)
+    const expectedCurrentStamina = Math.max(0, this.staminaState.maximum - (hoursAwakeSinceLastSleep * staminaDepletionRate));
+    const clampedStaminaValue = Math.max(0, Math.min(this.staminaState.maximum, expectedCurrentStamina));
     
-    this.state.current = newStamina;
+    this.staminaState.current = clampedStaminaValue;
   }
 
-  private checkSleepReminder(currentTime: GameTime): void {
+  private checkSleepReminder(currentGameTime: GameTime): void {
     // Show sleep reminder at configured hour if haven't slept today and haven't shown reminder today
-    if (currentTime.hour === this.config.sleepReminderHour && 
-        !this.state.hasSleptToday && 
-        this.state.lastReminderDay < currentTime.day) {
-      this.onNotification?.(`You should sleep soon! Staying up past midnight costs ${this.config.midnightPenalty} coins.`);
-      this.state.lastReminderDay = currentTime.day;
-      this.state.showedSleepReminder = true;
+    if (currentGameTime.hour === this.staminaConfig.sleepReminderHour && 
+        !this.staminaState.hasSleptToday && 
+        this.staminaState.lastReminderDay < currentGameTime.day) {
+      this.onNotificationCallback?.(`You should sleep soon! Staying up past midnight costs ${this.staminaConfig.midnightPenalty} coins.`);
+      this.staminaState.lastReminderDay = currentGameTime.day;
+      this.staminaState.showedSleepReminder = true;
     }
   }
 
-  private checkAutoSleep(currentTime: GameTime): void {
+  private checkAutoSleep(currentGameTime: GameTime): void {
     // Auto-sleep when stamina hits 0
-    if (this.state.current <= 0 && this.state.lastPenaltyDay < currentTime.day) {
-      this.onCoinsPenalty?.(-this.config.midnightPenalty);
-      this.onNotification?.(`You collapsed from exhaustion! Lost ${this.config.midnightPenalty} coins.`);
-      this.state.lastPenaltyDay = currentTime.day; // Track that we applied penalty for this day
+    if (this.staminaState.current <= 0 && this.staminaState.lastPenaltyDay < currentGameTime.day) {
+      this.onCoinsPenaltyCallback?.(-this.staminaConfig.midnightPenalty);
+      this.onNotificationCallback?.(`You collapsed from exhaustion! Lost ${this.staminaConfig.midnightPenalty} coins.`);
+      this.staminaState.lastPenaltyDay = currentGameTime.day; // Track that we applied penalty for this day
       
       // Auto-sleep: restore stamina and advance time to 7am
-      this.autoSleep();
+      this.performAutoSleep();
     }
   }
 
-  private autoSleep(): void {
+  private performAutoSleep(): void {
     // Determine if we need to advance to next day
-    const currentTime = this.timeManager.getCurrentGameTime();
-    const needsNextDay = currentTime.hour >= 7;
+    const currentGameTime = this.timeManager.getCurrentGameTime();
+    const shouldAdvanceToNextDay = currentGameTime.hour >= 7;
     
     // Set time to 7am
-    this.timeManager.setTimeToHour(7, needsNextDay);
+    this.timeManager.setTimeToHour(7, shouldAdvanceToNextDay);
     
     // Restore stamina
-    this.state.current = this.state.maximum;
+    this.staminaState.current = this.staminaState.maximum;
     
     // Update sleep tracking with continuous time
-    const newTimeState = this.timeManager.getState();
-    const newDayProgress = newTimeState.secondsIntoDay / newTimeState.dayDurationSeconds;
-    const newHourFloat = newDayProgress * 24;
-    this.state.lastSleepTime = (newTimeState.day - 1) * 24 + newHourFloat;
-    this.state.hasSleptToday = true;
-    this.state.showedSleepReminder = false;
+    const updatedTimeState = this.timeManager.getState();
+    const newDayProgressRatio = updatedTimeState.secondsIntoDay / updatedTimeState.dayDurationSeconds;
+    const newHourAsFloat = newDayProgressRatio * 24;
+    this.staminaState.lastSleepTime = (updatedTimeState.day - 1) * 24 + newHourAsFloat;
+    this.staminaState.hasSleptToday = true;
+    this.staminaState.showedSleepReminder = false;
     
-    this.onNotification?.('You wake up groggily at 7am after collapsing from exhaustion.');
+    this.onNotificationCallback?.('You wake up groggily at 7am after collapsing from exhaustion.');
   }
 }

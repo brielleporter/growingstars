@@ -15,191 +15,193 @@ export interface PlayerHUDOptions {
   panelWidth?: number;
 }
 
-export function renderHUD(ctx: CanvasRenderingContext2D, state: PlayerHUDState, opts: PlayerHUDOptions): void {
-  const margin = opts.margin ?? 16;
-  const panelW = opts.panelWidth ?? 260;
+export function renderHUD(canvasContext: CanvasRenderingContext2D, hudState: PlayerHUDState, renderOptions: PlayerHUDOptions): void {
+  const panelMargin = renderOptions.margin ?? 16;
+  const panelWidth = renderOptions.panelWidth ?? 260;
   // Calculate panel height based on rows
-  const rowH = 32;
-  const innerPad = 16; // Increased from 12 to 16 for more spacing from edges
-  const rows = 3; // stamina, water, coins (seeds moved to bottom bar)
-  const panelH = innerPad * 2 + 8 + rows * rowH + (rows - 1) * 16; // Added 8px for extra top spacing
+  const rowHeight = 32;
+  const innerPadding = 16; // Increased from 12 to 16 for more spacing from edges
+  const numberOfRows = 3; // stamina, water, coins (seeds moved to bottom bar)
+  const panelHeight = innerPadding * 2 + 8 + numberOfRows * rowHeight + (numberOfRows - 1) * 16; // Added 8px for extra top spacing
 
-  const x = margin;
-  const y = margin;
-  ctx.save();
+  const panelX = panelMargin;
+  const panelY = panelMargin;
+  canvasContext.save();
   // Panel background
-  roundRectPath(ctx, x, y, panelW, panelH, 12);
-  const bg = ctx.createLinearGradient(x, y, x, y + panelH);
-  bg.addColorStop(0, 'rgba(10, 25, 25, 0.85)');
-  bg.addColorStop(1, 'rgba(10, 14, 18, 0.85)');
-  ctx.fillStyle = bg;
-  ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#43ffd9';
-  ctx.shadowColor = '#43ffd9';
-  ctx.shadowBlur = 12;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  ctx.restore();
+  roundRectPath(canvasContext, panelX, panelY, panelWidth, panelHeight, 12);
+  const backgroundGradient = canvasContext.createLinearGradient(panelX, panelY, panelX, panelY + panelHeight);
+  backgroundGradient.addColorStop(0, 'rgba(10, 25, 25, 0.85)');
+  backgroundGradient.addColorStop(1, 'rgba(10, 14, 18, 0.85)');
+  canvasContext.fillStyle = backgroundGradient;
+  canvasContext.fill();
+  canvasContext.lineWidth = 2;
+  canvasContext.strokeStyle = '#43ffd9';
+  canvasContext.shadowColor = '#43ffd9';
+  canvasContext.shadowBlur = 12;
+  canvasContext.stroke();
+  canvasContext.shadowBlur = 0;
+  canvasContext.restore();
 
-  let cy = y + innerPad + 8; // Add extra 8px spacing from top
+  let currentRowY = panelY + innerPadding + 8; // Add extra 8px spacing from top
   // 1) Stamina bar (yellow progress bar) - moved to top with more spacing
-  drawStaminaBar(ctx, x + innerPad, cy, panelW - innerPad * 2, rowH - 2, state.stamina, state.maxStamina);
-  cy += rowH + 16; // Increased spacing
+  drawStaminaBar(canvasContext, panelX + innerPadding, currentRowY, panelWidth - innerPadding * 2, rowHeight - 2, hudState.stamina, hudState.maxStamina);
+  currentRowY += rowHeight + 16; // Increased spacing
 
   // 2) Water bar (turquoise segmented battery)
-  drawWaterBar(ctx, x + innerPad, cy, panelW - innerPad * 2, rowH - 2, state.water, state.maxWater);
-  cy += rowH + 16; // Increased spacing
+  drawWaterBar(canvasContext, panelX + innerPadding, currentRowY, panelWidth - innerPadding * 2, rowHeight - 2, hudState.water, hudState.maxWater);
+  currentRowY += rowHeight + 16; // Increased spacing
 
   // 3) Coin inventory (coin icon + amount)
-  drawCoinsRow(ctx, x + innerPad, cy, panelW - innerPad * 2, rowH - 2, state.coins);
+  drawCoinsRow(canvasContext, panelX + innerPadding, currentRowY, panelWidth - innerPadding * 2, rowHeight - 2, hudState.coins);
 }
 
-function drawWaterBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, water: number, maxWater: number): void {
-  const segments = Math.max(1, maxWater | 0);
-  const gap = 3;
-  const segW = (w - gap * (segments - 1)) / segments;
+function drawWaterBar(canvasContext: CanvasRenderingContext2D, barX: number, barY: number, barWidth: number, barHeight: number, currentWater: number, maximumWater: number): void {
+  const numberOfSegments = Math.max(1, maximumWater | 0);
+  const segmentGap = 3;
+  const segmentWidth = (barWidth - segmentGap * (numberOfSegments - 1)) / numberOfSegments;
   // Outer battery outline
-  ctx.save();
-  roundRectPath(ctx, x - 4, y - 2, w + 8, h + 4, 8);
-  ctx.strokeStyle = 'rgba(67,255,217,0.6)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  canvasContext.save();
+  roundRectPath(canvasContext, barX - 4, barY - 2, barWidth + 8, barHeight + 4, 8);
+  canvasContext.strokeStyle = 'rgba(67,255,217,0.6)';
+  canvasContext.lineWidth = 1.5;
+  canvasContext.stroke();
   // Tip
-  const tipW = 8, tipH = Math.min(h * 0.6, 12);
-  roundRectPath(ctx, x + w + 8, y + (h - tipH) / 2, tipW, tipH, 3);
-  ctx.fillStyle = 'rgba(67,255,217,0.6)';
-  ctx.fill();
+  const batteryTipWidth = 8;
+  const batteryTipHeight = Math.min(barHeight * 0.6, 12);
+  roundRectPath(canvasContext, barX + barWidth + 8, barY + (barHeight - batteryTipHeight) / 2, batteryTipWidth, batteryTipHeight, 3);
+  canvasContext.fillStyle = 'rgba(67,255,217,0.6)';
+  canvasContext.fill();
   // Segments
-  const filled = Math.max(0, Math.min(segments, Math.floor(water)));
-  for (let i = 0; i < segments; i++) {
-    const sx = Math.round(x + i * (segW + gap));
-    const active = i < filled;
-    const fill = active ? 'rgba(137,255,232,0.9)' : 'rgba(137,255,232,0.15)';
-    const stroke = active ? '#43ffd9' : 'rgba(67,255,217,0.35)';
-    roundRectPath(ctx, sx, y, segW, h, 4);
-    ctx.fillStyle = fill;
-    ctx.fill();
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = 1;
-    ctx.stroke();
+  const filledSegmentCount = Math.max(0, Math.min(numberOfSegments, Math.floor(currentWater)));
+  for (let segmentIndex = 0; segmentIndex < numberOfSegments; segmentIndex++) {
+    const segmentX = Math.round(barX + segmentIndex * (segmentWidth + segmentGap));
+    const isSegmentActive = segmentIndex < filledSegmentCount;
+    const segmentFillColor = isSegmentActive ? 'rgba(137,255,232,0.9)' : 'rgba(137,255,232,0.15)';
+    const segmentStrokeColor = isSegmentActive ? '#43ffd9' : 'rgba(67,255,217,0.35)';
+    roundRectPath(canvasContext, segmentX, barY, segmentWidth, barHeight, 4);
+    canvasContext.fillStyle = segmentFillColor;
+    canvasContext.fill();
+    canvasContext.strokeStyle = segmentStrokeColor;
+    canvasContext.lineWidth = 1;
+    canvasContext.stroke();
   }
   // Label
-  ctx.fillStyle = '#89ffe8';
-  ctx.font = '12px monospace';
-  ctx.textBaseline = 'alphabetic';
-  ctx.textAlign = 'left';
-  ctx.fillText(`Water ${filled}/${segments}`, x, y - 4);
-  ctx.restore();
+  canvasContext.fillStyle = '#89ffe8';
+  canvasContext.font = '12px monospace';
+  canvasContext.textBaseline = 'alphabetic';
+  canvasContext.textAlign = 'left';
+  canvasContext.fillText(`Water ${filledSegmentCount}/${numberOfSegments}`, barX, barY - 4);
+  canvasContext.restore();
 }
 
-function drawStaminaBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, stamina: number, maxStamina: number): void {
-  const fillRatio = Math.max(0, Math.min(1, stamina / maxStamina));
+function drawStaminaBar(canvasContext: CanvasRenderingContext2D, barX: number, barY: number, barWidth: number, barHeight: number, currentStamina: number, maximumStamina: number): void {
+  const staminaFillRatio = Math.max(0, Math.min(1, currentStamina / maximumStamina));
   
   // Background bar
-  ctx.save();
-  roundRectPath(ctx, x - 2, y - 2, w + 4, h + 4, 6);
-  ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  canvasContext.save();
+  roundRectPath(canvasContext, barX - 2, barY - 2, barWidth + 4, barHeight + 4, 6);
+  canvasContext.strokeStyle = 'rgba(255, 215, 0, 0.6)';
+  canvasContext.lineWidth = 1.5;
+  canvasContext.stroke();
   
   // Background fill
-  roundRectPath(ctx, x, y, w, h, 4);
-  ctx.fillStyle = 'rgba(255, 215, 0, 0.1)';
-  ctx.fill();
+  roundRectPath(canvasContext, barX, barY, barWidth, barHeight, 4);
+  canvasContext.fillStyle = 'rgba(255, 215, 0, 0.1)';
+  canvasContext.fill();
   
   // Foreground fill based on stamina level (smooth continuous fill)
-  if (fillRatio > 0) {
-    const fillW = w * fillRatio;
+  if (staminaFillRatio > 0) {
+    const filledBarWidth = barWidth * staminaFillRatio;
     
     // Use smooth clipping for continuous appearance
-    ctx.save();
-    roundRectPath(ctx, x, y, w, h, 4);
-    ctx.clip();
+    canvasContext.save();
+    roundRectPath(canvasContext, barX, barY, barWidth, barHeight, 4);
+    canvasContext.clip();
     
-    // Create full-width rectangle, but clipped to fillW
-    roundRectPath(ctx, x, y, fillW, h, 4);
+    // Create full-width rectangle, but clipped to filledBarWidth
+    roundRectPath(canvasContext, barX, barY, filledBarWidth, barHeight, 4);
     
     // Color based on stamina level
-    let fillColor = 'rgba(255, 215, 0, 0.8)'; // Golden yellow
-    if (fillRatio < 0.25) {
-      fillColor = 'rgba(255, 100, 100, 0.8)'; // Red when very low
-    } else if (fillRatio < 0.5) {
-      fillColor = 'rgba(255, 165, 0, 0.8)'; // Orange when low
+    let staminaBarColor = 'rgba(255, 215, 0, 0.8)'; // Golden yellow
+    if (staminaFillRatio < 0.25) {
+      staminaBarColor = 'rgba(255, 100, 100, 0.8)'; // Red when very low
+    } else if (staminaFillRatio < 0.5) {
+      staminaBarColor = 'rgba(255, 165, 0, 0.8)'; // Orange when low
     }
     
-    ctx.fillStyle = fillColor;
-    ctx.fill();
+    canvasContext.fillStyle = staminaBarColor;
+    canvasContext.fill();
     
     // Highlight gradient for smooth appearance
-    const grad = ctx.createLinearGradient(x, y, x, y + h);
-    grad.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
-    grad.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
-    grad.addColorStop(1, 'rgba(0, 0, 0, 0.1)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(x, y, fillW, h);
+    const highlightGradient = canvasContext.createLinearGradient(barX, barY, barX, barY + barHeight);
+    highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
+    highlightGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
+    highlightGradient.addColorStop(1, 'rgba(0, 0, 0, 0.1)');
+    canvasContext.fillStyle = highlightGradient;
+    canvasContext.fillRect(barX, barY, filledBarWidth, barHeight);
     
-    ctx.restore();
+    canvasContext.restore();
   }
   
   // Label with more space from edge
-  ctx.fillStyle = '#ffd700';
-  ctx.font = '12px monospace';
-  ctx.textBaseline = 'alphabetic';
-  ctx.textAlign = 'left';
-  const staminaText = `Stamina ${Math.round(stamina)}/${Math.round(maxStamina)}`;
-  ctx.fillText(staminaText, x, y - 8); // Moved down from y-4 to y-8 for more space
-  ctx.restore();
+  canvasContext.fillStyle = '#ffd700';
+  canvasContext.font = '12px monospace';
+  canvasContext.textBaseline = 'alphabetic';
+  canvasContext.textAlign = 'left';
+  const staminaLabelText = `Stamina ${Math.round(currentStamina)}/${Math.round(maximumStamina)}`;
+  canvasContext.fillText(staminaLabelText, barX, barY - 8); // Moved down from y-4 to y-8 for more space
+  canvasContext.restore();
 }
 
 // (Seed row removed; seeds now shown in bottom inventory bar)
 
-function drawCoinsRow(ctx: CanvasRenderingContext2D, x: number, y: number, _w: number, h: number, coins: number): void {
-  const iconSize = Math.min(h, 18);
-  drawCoinIcon(ctx, x, y + (h - iconSize) / 2, iconSize);
-  ctx.save();
-  ctx.fillStyle = '#ffe56b';
-  ctx.shadowColor = 'rgba(255,229,107,0.45)';
-  ctx.shadowBlur = 6;
-  ctx.font = '13px monospace';
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = 'left';
-  ctx.fillText(`${coins}`, x + iconSize + 10, y + h / 2);
-  ctx.restore();
+function drawCoinsRow(canvasContext: CanvasRenderingContext2D, rowX: number, rowY: number, _rowWidth: number, rowHeight: number, coinCount: number): void {
+  const coinIconSize = Math.min(rowHeight, 18);
+  drawCoinIcon(canvasContext, rowX, rowY + (rowHeight - coinIconSize) / 2, coinIconSize);
+  canvasContext.save();
+  canvasContext.fillStyle = '#ffe56b';
+  canvasContext.shadowColor = 'rgba(255,229,107,0.45)';
+  canvasContext.shadowBlur = 6;
+  canvasContext.font = '13px monospace';
+  canvasContext.textBaseline = 'middle';
+  canvasContext.textAlign = 'left';
+  canvasContext.fillText(`${coinCount}`, rowX + coinIconSize + 10, rowY + rowHeight / 2);
+  canvasContext.restore();
 }
 
 // (Sprout icon not used in top-left HUD)
 
-function drawCoinIcon(ctx: CanvasRenderingContext2D, x: number, y: number, s: number): void {
-  const r = s * 0.48;
-  const cx = x + r + 1, cy = y + r + 1;
-  ctx.save();
-  const grad = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.2, cx, cy, r);
-  grad.addColorStop(0, '#fff2a1');
-  grad.addColorStop(1, '#ffc94a');
-  ctx.fillStyle = grad;
-  ctx.shadowColor = 'rgba(255,229,107,0.6)';
-  ctx.shadowBlur = 8;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = '#e6b300';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.restore();
+function drawCoinIcon(canvasContext: CanvasRenderingContext2D, iconX: number, iconY: number, iconSize: number): void {
+  const coinRadius = iconSize * 0.48;
+  const coinCenterX = iconX + coinRadius + 1;
+  const coinCenterY = iconY + coinRadius + 1;
+  canvasContext.save();
+  const coinGradient = canvasContext.createRadialGradient(coinCenterX - coinRadius * 0.3, coinCenterY - coinRadius * 0.3, coinRadius * 0.2, coinCenterX, coinCenterY, coinRadius);
+  coinGradient.addColorStop(0, '#fff2a1');
+  coinGradient.addColorStop(1, '#ffc94a');
+  canvasContext.fillStyle = coinGradient;
+  canvasContext.shadowColor = 'rgba(255,229,107,0.6)';
+  canvasContext.shadowBlur = 8;
+  canvasContext.beginPath();
+  canvasContext.arc(coinCenterX, coinCenterY, coinRadius, 0, Math.PI * 2);
+  canvasContext.fill();
+  canvasContext.shadowBlur = 0;
+  canvasContext.strokeStyle = '#e6b300';
+  canvasContext.lineWidth = 1;
+  canvasContext.stroke();
+  canvasContext.restore();
 }
 
-function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  const rr = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.lineTo(x + w - rr, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
-  ctx.lineTo(x + w, y + h - rr);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
-  ctx.lineTo(x + rr, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
-  ctx.lineTo(x, y + rr);
-  ctx.quadraticCurveTo(x, y, x + rr, y);
+function roundRectPath(canvasContext: CanvasRenderingContext2D, rectX: number, rectY: number, rectWidth: number, rectHeight: number, cornerRadius: number): void {
+  const adjustedRadius = Math.min(cornerRadius, rectWidth / 2, rectHeight / 2);
+  canvasContext.beginPath();
+  canvasContext.moveTo(rectX + adjustedRadius, rectY);
+  canvasContext.lineTo(rectX + rectWidth - adjustedRadius, rectY);
+  canvasContext.quadraticCurveTo(rectX + rectWidth, rectY, rectX + rectWidth, rectY + adjustedRadius);
+  canvasContext.lineTo(rectX + rectWidth, rectY + rectHeight - adjustedRadius);
+  canvasContext.quadraticCurveTo(rectX + rectWidth, rectY + rectHeight, rectX + rectWidth - adjustedRadius, rectY + rectHeight);
+  canvasContext.lineTo(rectX + adjustedRadius, rectY + rectHeight);
+  canvasContext.quadraticCurveTo(rectX, rectY + rectHeight, rectX, rectY + rectHeight - adjustedRadius);
+  canvasContext.lineTo(rectX, rectY + adjustedRadius);
+  canvasContext.quadraticCurveTo(rectX, rectY, rectX + adjustedRadius, rectY);
 }

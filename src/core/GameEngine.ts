@@ -41,63 +41,63 @@ export class GameEngine {
   private mapLoader: MapLoader;
   private tilemapRenderer: TilemapRenderer;
   private worldMap: LoadedMap | null = null;
-  private interactionAreas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' | 'storefront' }>=[];
-  private staticCollisionRects: Array<{ x: number; y: number; w: number; h: number }>=[];
+  private interactionAreas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' | 'storefront' }> = [];
+  private staticCollisionRects: Array<{ x: number; y: number; w: number; h: number }> = [];
   private camera!: Camera;
-  private centerOrigin = { x: 0, y: 0 };
-  private houseWorld = { x: 0, y: 0 };
-  private isInterior = false;
-  private fadeTransition: { active: boolean; start: number; duration: number; midFired: boolean; onMid?: () => Promise<void> | void } = { active: false, start: 0, duration: 600, midFired: false };
+  private centerOriginPosition = { x: 0, y: 0 };
+  private houseWorldPosition = { x: 0, y: 0 };
+  private isInsideBuilding = false;
+  private fadeTransitionState: { active: boolean; startTime: number; duration: number; midPointFired: boolean; onMidPointCallback?: () => Promise<void> | void } = { active: false, startTime: 0, duration: 600, midPointFired: false };
   // Storefront prop (bones)
   private storefrontImage: HTMLImageElement | null = null;
-  private storefrontWorld = { x: 0, y: 0 };
-  private storefrontCollision: { x: number; y: number; w: number; h: number } | null = null;
+  private storefrontWorldPosition = { x: 0, y: 0 };
+  private storefrontCollisionBox: { x: number; y: number; w: number; h: number } | null = null;
   // Shop UI state
-  private shopOpen = false;
-  private shopSelected = 0;
-  private shopItems: Array<{ plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; price: number }> = [];
+  private isShopOpen = false;
+  private selectedShopItemIndex = 0;
+  private availableShopItems: Array<{ plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; price: number }> = [];
 
   // Game state
   private gameAssets!: GameAssets;
-  private isRunning = false;
-  private lastTimestamp = 0;
+  private isGameRunning = false;
+  private previousFrameTimestamp = 0;
   private harvestingInputHandler?: () => void;
-  private activeEffects: Array<{ x: number; baselineY: number; start: number; kind: 'slash' | 'water'; row: number; targetHeight: number; targetPlant?: PlantEntity }>=[];
-  private notifications: Array<{ text: string; until: number }> = [];
-  private wasEPressed = false;
-  private suppressEmptyShipPrompt = false;
-  private wasQPressed = false;
+  private activeVisualEffects: Array<{ x: number; baselineY: number; startTime: number; kind: 'slash' | 'water'; row: number; targetHeight: number; targetPlant?: PlantEntity }> = [];
+  private gameNotifications: Array<{ text: string; expirationTime: number }> = [];
+  private wasInteractionKeyPressed = false;
+  private shouldSuppressEmptyShipPrompt = false;
+  private wasQuitShopKeyPressed = false;
   private inventory: InventorySystem;
   // Simple demo data for HUD seeds (since seeds are not yet an inventory item)
-  private hudSeedType: string = 'sprout';
-  private hudSeedCount: number = 12;
+  private hudDisplaySeedType: string = 'sprout';
+  private hudDisplaySeedCount: number = 12;
   // Bottom inventory bar
-  private inventorySlots: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; count: number } | null> = [];
-  private selectedSlot = 0;
-  private wasLeftPressed = false;
-  private wasRightPressed = false;
-  private wasSpacePressed = false;
-  private wasUpPressed = false;
-  private wasDownPressed = false;
-  private wasEnterPressed = false;
-  private wasEscPressed = false;
+  private playerInventorySlots: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; count: number } | null> = [];
+  private selectedInventorySlotIndex = 0;
+  private wasLeftArrowPressed = false;
+  private wasRightArrowPressed = false;
+  private wasSpaceKeyPressed = false;
+  private wasUpArrowPressed = false;
+  private wasDownArrowPressed = false;
+  private wasEnterKeyPressed = false;
+  private wasEscapeKeyPressed = false;
   // Player systems
-  private timeManager?: TimeManager;
+  // timeManager is passed to setTimeManager but not stored as it's managed externally
   private staminaSystem?: StaminaSystem;
 
   constructor(canvasElementId: string) {
-    const canvas = document.getElementById(canvasElementId) as HTMLCanvasElement;
-    if (!canvas) {
+    const canvasElement = document.getElementById(canvasElementId);
+    if (!canvasElement || !(canvasElement instanceof HTMLCanvasElement)) {
       throw new Error(`Canvas element with id '${canvasElementId}' not found`);
     }
 
-    const context = canvas.getContext('2d');
-    if (!context) {
+    const renderingContext = canvasElement.getContext('2d');
+    if (!renderingContext) {
       throw new Error('Canvas 2D context not available');
     }
 
-    this.canvas = canvas;
-    this.renderingContext = context;
+    this.canvas = canvasElement;
+    this.renderingContext = renderingContext;
     this.renderingContext.imageSmoothingEnabled = false;
     
     // Set up canvas to fill viewport
@@ -123,10 +123,10 @@ export class GameEngine {
     this.camera = new Camera();
     this.camera.setViewport(this.canvas.width, this.canvas.height);
     // Initialize inventory bar (8 slots)
-    this.inventorySlots = new Array(8).fill(null);
-    this.inventorySlots[0] = { kind: 'seed', plantType: 'eye', count: 6 };
-    this.inventorySlots[1] = { kind: 'seed', plantType: 'tentacle', count: 6 };
-    this.inventorySlots[2] = { kind: 'seed', plantType: 'spike', count: 6 };
+    this.playerInventorySlots = new Array(8).fill(null);
+    this.playerInventorySlots[0] = { kind: 'seed', plantType: 'eye', count: 6 };
+    this.playerInventorySlots[1] = { kind: 'seed', plantType: 'tentacle', count: 6 };
+    this.playerInventorySlots[2] = { kind: 'seed', plantType: 'spike', count: 6 };
   }
 
   private setupViewportCanvas(): void {
@@ -144,7 +144,6 @@ export class GameEngine {
   }
 
   public setTimeManager(timeManager: TimeManager): void {
-    this.timeManager = timeManager;
     this.staminaSystem = new StaminaSystem(timeManager);
     
     // Setup stamina system callbacks
@@ -164,14 +163,14 @@ export class GameEngine {
     });
     
     // Set up shop item refresh on day/season changes
-    let lastDay = timeManager.getState().day;
-    let lastSeason = timeManager.getState().seasonIndex;
+    let previousDayNumber = timeManager.getState().day;
+    let previousSeasonIndex = timeManager.getState().seasonIndex;
     
-    timeManager.addListener((state) => {
-      if (state.day !== lastDay || state.seasonIndex !== lastSeason) {
-        this.refreshShopItems(state.day, state.seasonIndex);
-        lastDay = state.day;
-        lastSeason = state.seasonIndex;
+    timeManager.addListener((currentTimeState) => {
+      if (currentTimeState.day !== previousDayNumber || currentTimeState.seasonIndex !== previousSeasonIndex) {
+        this.refreshShopItems(currentTimeState.day, currentTimeState.seasonIndex);
+        previousDayNumber = currentTimeState.day;
+        previousSeasonIndex = currentTimeState.seasonIndex;
       }
     });
   }
@@ -192,23 +191,23 @@ export class GameEngine {
     try {
       this.worldMap = await this.mapLoader.loadMap('/src/assets/maps/homeMap.tmj');
       // Compute world/tile sizing and camera
-      const tile = TILE_CONFIG.tileSize;
-      const baseW = this.worldMap.widthTiles * tile;
-      const baseH = this.worldMap.heightTiles * tile;
-      this.centerOrigin = { x: baseW, y: baseH };
-      const worldW = baseW * 3;
-      const worldH = baseH * 3;
-      this.camera.setWorldSize(worldW, worldH);
-      this.playerMovement.setWorldSize(worldW, worldH);
+      const tileSize = TILE_CONFIG.tileSize;
+      const baseChunkWidth = this.worldMap.widthTiles * tileSize;
+      const baseChunkHeight = this.worldMap.heightTiles * tileSize;
+      this.centerOriginPosition = { x: baseChunkWidth, y: baseChunkHeight };
+      const totalWorldWidth = baseChunkWidth * 3;
+      const totalWorldHeight = baseChunkHeight * 3;
+      this.camera.setWorldSize(totalWorldWidth, totalWorldHeight);
+      this.playerMovement.setWorldSize(totalWorldWidth, totalWorldHeight);
       // Place player at center of center chunk
-      const p = this.playerMovement.getPlayerCharacter();
-      p.xPosition = this.centerOrigin.x + Math.floor(baseW / 2);
-      p.yPosition = this.centerOrigin.y + Math.floor(baseH / 2);
-      this.camera.follow(p.xPosition, p.yPosition);
+      const playerCharacter = this.playerMovement.getPlayerCharacter();
+      playerCharacter.xPosition = this.centerOriginPosition.x + Math.floor(baseChunkWidth / 2);
+      playerCharacter.yPosition = this.centerOriginPosition.y + Math.floor(baseChunkHeight / 2);
+      this.camera.follow(playerCharacter.xPosition, playerCharacter.yPosition);
       // House world location inside center chunk
-      const hx = this.centerOrigin.x + Math.floor((HOUSE_CONFIG.tileX + 0.5) * tile);
-      const hy = this.centerOrigin.y + Math.floor((HOUSE_CONFIG.tileY + 1) * tile);
-      this.houseWorld = { x: hx, y: hy };
+      const houseWorldX = this.centerOriginPosition.x + Math.floor((HOUSE_CONFIG.tileX + 0.5) * tileSize);
+      const houseWorldY = this.centerOriginPosition.y + Math.floor((HOUSE_CONFIG.tileY + 1) * tileSize);
+      this.houseWorldPosition = { x: houseWorldX, y: houseWorldY };
       // Build interaction areas and static collisions
       this.buildInteractionAreas();
       console.log('Loaded Tiled map:', this.worldMap.widthTiles, 'x', this.worldMap.heightTiles);
@@ -231,33 +230,33 @@ export class GameEngine {
 
     // Compute storefront world position precisely one chunk above the house baseline
     if (this.worldMap) {
-      const tile = TILE_CONFIG.tileSize;
-      const chunkH = this.worldMap.heightTiles * tile;
-      const storeX = this.houseWorld.x;
-      const storeY = this.houseWorld.y - chunkH;
-      this.storefrontWorld = { x: storeX, y: storeY };
+      const tileSize = TILE_CONFIG.tileSize;
+      const chunkHeight = this.worldMap.heightTiles * tileSize;
+      const storefrontX = this.houseWorldPosition.x;
+      const storefrontY = this.houseWorldPosition.y - chunkHeight;
+      this.storefrontWorldPosition = { x: storefrontX, y: storefrontY };
       // Collision aligned to the storefront's bottom tile (same baseline as image)
-      this.storefrontCollision = { x: Math.floor(storeX - tile / 2), y: Math.floor(storeY - tile), w: tile, h: tile };
+      this.storefrontCollisionBox = { x: Math.floor(storefrontX - tileSize / 2), y: Math.floor(storefrontY - tileSize), w: tileSize, h: tileSize };
     }
 
     // Load storefront image (bonesShadow21) and align collision to the drawn PNG bounds
     this.storefrontImage = new Image();
     this.storefrontImage.onload = () => {
-      const img = this.storefrontImage!;
-      const w0 = img.naturalWidth;
-      const h0 = img.naturalHeight;
-      const tile = TILE_CONFIG.tileSize;
+      const storefrontImageElement = this.storefrontImage!;
+      const originalImageWidth = storefrontImageElement.naturalWidth;
+      const originalImageHeight = storefrontImageElement.naturalHeight;
+      const tileSize = TILE_CONFIG.tileSize;
       // Horizontal crop: 3 tiles per side (already correct per feedback)
-      const shrinkX = 3 * tile;
-      const w = Math.max(tile, w0 - shrinkX * 2);
-      const x = Math.floor(this.storefrontWorld.x - Math.floor(w0 / 2) + shrinkX);
+      const horizontalShrinkAmount = 3 * tileSize;
+      const croppedWidth = Math.max(tileSize, originalImageWidth - horizontalShrinkAmount * 2);
+      const collisionBoxX = Math.floor(this.storefrontWorldPosition.x - Math.floor(originalImageWidth / 2) + horizontalShrinkAmount);
       // Vertical crop: reduce front/south (bottom) by 1 tile, and bring in above (top) by 3 tiles
-      const cropTop = 3 * tile;
-      const cropBottom = 1 * tile;
-      const topY = this.storefrontWorld.y - h0;
-      const y = Math.floor(topY + cropTop);
-      const h = Math.max(tile, h0 - cropTop - cropBottom);
-      this.storefrontCollision = { x, y, w, h };
+      const topCropAmount = 3 * tileSize;
+      const bottomCropAmount = 1 * tileSize;
+      const imageTopY = this.storefrontWorldPosition.y - originalImageHeight;
+      const collisionBoxY = Math.floor(imageTopY + topCropAmount);
+      const croppedHeight = Math.max(tileSize, originalImageHeight - topCropAmount - bottomCropAmount);
+      this.storefrontCollisionBox = { x: collisionBoxX, y: collisionBoxY, w: croppedWidth, h: croppedHeight };
       // Refresh interactions and collisions now that storefront bounds are known
       this.buildInteractionAreas();
       this.updateWorldCollisions();
@@ -271,19 +270,19 @@ export class GameEngine {
   }
 
   public start(): void {
-    if (this.isRunning) {
+    if (this.isGameRunning) {
       console.warn('Game is already running');
       return;
     }
 
-    this.isRunning = true;
-    this.lastTimestamp = performance.now();
+    this.isGameRunning = true;
+    this.previousFrameTimestamp = performance.now();
     requestAnimationFrame(this.gameLoop.bind(this));
     console.log('Game started');
   }
 
   public stop(): void {
-    this.isRunning = false;
+    this.isGameRunning = false;
     this.keyboardInput.cleanup();
     this.mouseInput.cleanup();
     console.log('Game stopped');
@@ -298,8 +297,8 @@ export class GameEngine {
     return {
       water,
       maxWater,
-      seeds: this.hudSeedCount,
-      seedType: this.hudSeedType,
+      seeds: this.hudDisplaySeedCount,
+      seedType: this.hudDisplaySeedType,
       coins,
       stamina: staminaState.current,
       maxStamina: staminaState.maximum,
@@ -307,38 +306,38 @@ export class GameEngine {
   }
 
   public getInventoryView(): { items: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; count: number } | null>; selectedIndex: number } {
-    return { items: this.inventorySlots, selectedIndex: this.selectedSlot };
+    return { items: this.playerInventorySlots, selectedIndex: this.selectedInventorySlotIndex };
   }
 
   public isInteriorScene(): boolean {
-    return this.isInterior;
+    return this.isInsideBuilding;
   }
 
 
   private moveSelection(dir: number): void {
-    const n = this.inventorySlots.length;
-    this.selectedSlot = (this.selectedSlot + dir + n) % n;
+    const n = this.playerInventorySlots.length;
+    this.selectedInventorySlotIndex = (this.selectedInventorySlotIndex + dir + n) % n;
   }
 
   private hasAnySeeds(): boolean {
-    for (const it of this.inventorySlots) { if (it && it.kind === 'seed' && it.count > 0) return true; }
+    for (const it of this.playerInventorySlots) { if (it && it.kind === 'seed' && it.count > 0) return true; }
     return false;
   }
 
   private consumeOneSeed(): void {
     // Prefer selected slot if it is seeds
-    let idx = this.selectedSlot;
-    if (!(this.inventorySlots[idx] && this.inventorySlots[idx]!.kind === 'seed' && (this.inventorySlots[idx] as any).count > 0)) {
-      idx = this.inventorySlots.findIndex(it => it && it.kind === 'seed' && it.count > 0);
+    let idx = this.selectedInventorySlotIndex;
+    if (!(this.playerInventorySlots[idx] && this.playerInventorySlots[idx]!.kind === 'seed' && (this.playerInventorySlots[idx] as any).count > 0)) {
+      idx = this.playerInventorySlots.findIndex(it => it && it.kind === 'seed' && it.count > 0);
       if (idx < 0) return;
     }
-    const it = this.inventorySlots[idx] as any;
+    const it = this.playerInventorySlots[idx] as any;
     it.count -= 1;
-    if (it.count <= 0) this.inventorySlots[idx] = null;
+    if (it.count <= 0) this.playerInventorySlots[idx] = null;
   }
 
   private useSelectedItem(): void {
-    const it = this.inventorySlots[this.selectedSlot];
+    const it = this.playerInventorySlots[this.selectedInventorySlotIndex];
     if (!it) { this.pushNotification('Empty slot'); return; }
     if (it.kind === 'seed') {
       const player = this.playerMovement.getPlayerCharacter();
@@ -355,10 +354,10 @@ export class GameEngine {
   }
 
   private getSelectedSeedType(): 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom' | null {
-    const it = this.inventorySlots[this.selectedSlot];
+    const it = this.playerInventorySlots[this.selectedInventorySlotIndex];
     if (it && it.kind === 'seed' && it.count > 0) return it.plantType;
-    const idx = this.inventorySlots.findIndex(s => s && s.kind === 'seed' && s.count > 0);
-    if (idx >= 0) return (this.inventorySlots[idx] as any).plantType;
+    const idx = this.playerInventorySlots.findIndex(s => s && s.kind === 'seed' && s.count > 0);
+    if (idx >= 0) return (this.playerInventorySlots[idx] as any).plantType;
     return null;
   }
 
@@ -418,7 +417,7 @@ export class GameEngine {
             const baselineY = player.yPosition + displayHeight / 2;
             const targetHeight = Math.floor(displayHeight * HARVEST_EFFECT_CONFIG.scale);
             const row = player.currentRow; // up,left,down,right mapping
-            this.activeEffects.push({ x: player.xPosition, baselineY, start: now, kind: 'slash', row, targetHeight, targetPlant });
+            this.activeVisualEffects.push({ x: player.xPosition, baselineY, startTime: now, kind: 'slash', row, targetHeight, targetPlant });
           }
           lastHarvestTime = now;
         }
@@ -442,7 +441,7 @@ export class GameEngine {
     const baselineY = player.yPosition + displayHeight / 2;
     const targetHeight = Math.floor(displayHeight * WATER_EFFECT_CONFIG.scale);
     const row = player.currentRow;
-    this.activeEffects.push({ x: player.xPosition, baselineY, start: now, kind: 'water', row, targetHeight });
+    this.activeVisualEffects.push({ x: player.xPosition, baselineY, startTime: now, kind: 'water', row, targetHeight });
     // Attempt to water nearby tiles: forward, current, and orthogonal neighbors
     const tile = TILE_CONFIG.tileSize;
     const feetX = player.xPosition;
@@ -538,10 +537,10 @@ export class GameEngine {
   }
 
   private gameLoop(currentTimestamp: number): void {
-    if (!this.isRunning) return;
+    if (!this.isGameRunning) return;
 
-    const deltaTimeSeconds = (currentTimestamp - this.lastTimestamp) / 1000;
-    this.lastTimestamp = currentTimestamp;
+    const deltaTimeSeconds = (currentTimestamp - this.previousFrameTimestamp) / 1000;
+    this.previousFrameTimestamp = currentTimestamp;
 
     this.updateGameState(deltaTimeSeconds);
     this.renderFrame();
@@ -558,46 +557,46 @@ export class GameEngine {
     }
 
     // Handle planting input
-    if (this.plantingInputHandler && !this.shopOpen) {
+    if (this.plantingInputHandler && !this.isShopOpen) {
       this.plantingInputHandler();
     }
     // Handle interactions (E key) on key-down edge to avoid spamming
     const ePressed = this.keyboardInput.isKeyPressed('e');
-    if (ePressed && !this.wasEPressed) {
+    if (ePressed && !this.wasInteractionKeyPressed) {
       this.handleInteractions();
     }
-    this.wasEPressed = ePressed;
+    this.wasInteractionKeyPressed = ePressed;
     // Handle watering (Q key) on key-down edge
     const qPressed = this.keyboardInput.isKeyPressed('q');
-    if (qPressed && !this.wasQPressed && !this.shopOpen) {
+    if (qPressed && !this.wasQuitShopKeyPressed && !this.isShopOpen) {
       this.handleWatering();
     }
-    this.wasQPressed = qPressed;
+    this.wasQuitShopKeyPressed = qPressed;
     // Handle harvesting input
-    if (this.harvestingInputHandler && !this.shopOpen) {
+    if (this.harvestingInputHandler && !this.isShopOpen) {
       this.harvestingInputHandler();
     }
 
     // Shop input handling
-    if (this.shopOpen) {
+    if (this.isShopOpen) {
       this.handleShopInput();
     } else {
       // Inventory selection only when shop closed
       const left = this.keyboardInput.isKeyPressed('arrowleft');
       const right = this.keyboardInput.isKeyPressed('arrowright');
-      if (left && !this.wasLeftPressed) this.moveSelection(-1);
-      if (right && !this.wasRightPressed) this.moveSelection(1);
-      this.wasLeftPressed = left;
-      this.wasRightPressed = right;
+      if (left && !this.wasLeftArrowPressed) this.moveSelection(-1);
+      if (right && !this.wasRightArrowPressed) this.moveSelection(1);
+      this.wasLeftArrowPressed = left;
+      this.wasRightArrowPressed = right;
 
       const space = this.keyboardInput.isKeyPressed(' ');
-      if (space && !this.wasSpacePressed) this.useSelectedItem();
-      this.wasSpacePressed = space;
+      if (space && !this.wasSpaceKeyPressed) this.useSelectedItem();
+      this.wasSpaceKeyPressed = space;
     }
 
     const space = this.keyboardInput.isKeyPressed(' ');
-    if (space && !this.wasSpacePressed) this.useSelectedItem();
-    this.wasSpacePressed = space;
+    if (space && !this.wasSpaceKeyPressed) this.useSelectedItem();
+    this.wasSpaceKeyPressed = space;
 
     // If it's raining outside, water all unwatered seeds automatically
     if (this.isRainingOutside()) {
@@ -608,18 +607,18 @@ export class GameEngine {
     this.staminaSystem?.update();
 
     // Update fade transition state
-    if (this.fadeTransition.active) {
+    if (this.fadeTransitionState.active) {
       const now = performance.now();
-      const t = now - this.fadeTransition.start;
-      if (!this.fadeTransition.midFired && t >= this.fadeTransition.duration / 2) {
-        this.fadeTransition.midFired = true;
+      const t = now - this.fadeTransitionState.startTime;
+      if (!this.fadeTransitionState.midPointFired && t >= this.fadeTransitionState.duration / 2) {
+        this.fadeTransitionState.midPointFired = true;
         // Switch maps at midpoint
-        const fn = this.fadeTransition.onMid;
+        const fn = this.fadeTransitionState.onMidPointCallback;
         if (fn) Promise.resolve(fn()).catch(err => console.error('Transition mid callback failed', err));
       }
-      if (t >= this.fadeTransition.duration) {
-        this.fadeTransition.active = false;
-        this.fadeTransition.onMid = undefined;
+      if (t >= this.fadeTransitionState.duration) {
+        this.fadeTransitionState.active = false;
+        this.fadeTransitionState.onMidPointCallback = undefined;
       }
     }
 
@@ -638,12 +637,12 @@ export class GameEngine {
   private isRainingOutside(): boolean {
     try {
       const w = (window as any).currentWeather;
-      return !this.isInterior && w === 'storm';
+      return !this.isInsideBuilding && w === 'storm';
     } catch (_) { return false; }
   }
 
   private updateWorldCollisions(): void {
-    if (this.isInterior) {
+    if (this.isInsideBuilding) {
       // In interior scene, use only static collisions (none by default)
       this.playerMovement.setCollisionRects(this.staticCollisionRects);
       return;
@@ -655,22 +654,22 @@ export class GameEngine {
     }
     const dw = base.naturalWidth;
     const dh = base.naturalHeight;
-    const dx = Math.floor(this.houseWorld.x - Math.floor(dw / 2));
-    const dy = Math.floor(this.houseWorld.y - dh);
+    const dx = Math.floor(this.houseWorldPosition.x - Math.floor(dw / 2));
+    const dy = Math.floor(this.houseWorldPosition.y - dh);
     // Tight collision crop (222x100 at 1x), anchored to bottom-center
     const cropW = RENDER_CONFIG.playerHouseCollisionSize.width;
     const cropH = RENDER_CONFIG.playerHouseCollisionSize.height;
     const cx = Math.floor((dx + dw / 2) - cropW / 2);
     const cy = Math.floor(dy + dh - cropH);
     const combined = [...this.staticCollisionRects, { x: cx, y: cy, w: cropW, h: cropH }];
-    if (this.storefrontCollision) combined.push(this.storefrontCollision);
+    if (this.storefrontCollisionBox) combined.push(this.storefrontCollisionBox);
     this.playerMovement.setCollisionRects(combined);
   }
 
   private buildInteractionAreas(): void {
     if (!this.worldMap) return;
     const tile = TILE_CONFIG.tileSize;
-    const baseLayerOffset = { x: this.centerOrigin.x, y: this.centerOrigin.y };
+    const baseLayerOffset = { x: this.centerOriginPosition.x, y: this.centerOriginPosition.y };
     const areas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' | 'storefront' }> = [];
     const addFromLayer = (name: string, kind: 'well' | 'ship' | 'bed') => {
       const layer = this.worldMap!.layers.find(l => l.name === name);
@@ -686,17 +685,17 @@ export class GameEngine {
     };
     addFromLayer('interactWell', 'well');
     addFromLayer('interactShip', 'ship');
-    if (this.isInterior) {
+    if (this.isInsideBuilding) {
       addFromLayer('interactBed', 'bed');
     }
-    if (!this.isInterior) {
+    if (!this.isInsideBuilding) {
       // Add house door interaction in front of the house base (approximate center tile)
-      const doorX = Math.floor(this.houseWorld.x - tile / 2);
-      const doorY = Math.floor(this.houseWorld.y - tile);
+      const doorX = Math.floor(this.houseWorldPosition.x - tile / 2);
+      const doorY = Math.floor(this.houseWorldPosition.y - tile);
       areas.push({ x: doorX, y: doorY, w: tile, h: tile, kind: 'enterHouse' });
       // Storefront interact areas on all sides (perimeter of its collision rect)
-      if (this.storefrontCollision) {
-        const s = this.storefrontCollision;
+      if (this.storefrontCollisionBox) {
+        const s = this.storefrontCollisionBox;
         const startTx = Math.floor(s.x / tile);
         const endTx = Math.floor((s.x + s.w - 1) / tile);
         const startTy = Math.floor(s.y / tile);
@@ -713,7 +712,7 @@ export class GameEngine {
         }
       }
     }
-    if (this.isInterior && this.worldMap) {
+    if (this.isInsideBuilding && this.worldMap) {
       // Exit interaction at Tiled tile (1,6)
       const originX = (this.worldMap as any).originX ?? 0;
       const originY = (this.worldMap as any).originY ?? 0;
@@ -735,8 +734,8 @@ export class GameEngine {
     } else if (near.kind === 'exitHouse') {
       this.exitHouse();
     } else if (near.kind === 'storefront') {
-      this.shopOpen = true;
-      this.shopSelected = 0;
+      this.isShopOpen = true;
+      this.selectedShopItemIndex = 0;
     } else if (near.kind === 'bed') {
       this.sleepAtBed();
     } else if (near.kind === 'ship') {
@@ -745,11 +744,11 @@ export class GameEngine {
         this.pushNotification('Nothing to ship');
         return;
       }
-      const res = this.inventory.sellAll(PLANT_PRICES as any);
+      const res = this.inventory.sellAllPlants(PLANT_PRICES as any);
       this.pushNotification(`Shipped ${items} for ${res.coinsGained} coins`);
       // After a successful sale, suppress the immediate 'Nothing to ship' prompt
       // while the player remains in range. It will show again after they leave and return.
-      this.suppressEmptyShipPrompt = true;
+      this.shouldSuppressEmptyShipPrompt = true;
     } else if (near.kind === 'well') {
       const before = this.inventory.getWater();
       this.inventory.refillWater();
@@ -770,19 +769,19 @@ export class GameEngine {
       const chunkW = this.worldMap.widthTiles * tile;
       const chunkH = this.worldMap.heightTiles * tile;
       // Base map
-      this.tilemapRenderer.render(this.worldMap, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x, y: this.centerOrigin.y });
-      if (!this.isInterior) {
+      this.tilemapRenderer.render(this.worldMap, { x: this.camera.x, y: this.camera.y }, { x: this.centerOriginPosition.x, y: this.centerOriginPosition.y });
+      if (!this.isInsideBuilding) {
         // Exterior world repeats surrounding chunks for endless feel
         const layers = ['baseGround', 'detailsGround'];
-        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y });
-        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y });
-        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x, y: this.centerOrigin.y - chunkH });
-        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x, y: this.centerOrigin.y + chunkH });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOriginPosition.x - chunkW, y: this.centerOriginPosition.y });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOriginPosition.x + chunkW, y: this.centerOriginPosition.y });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOriginPosition.x, y: this.centerOriginPosition.y - chunkH });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOriginPosition.x, y: this.centerOriginPosition.y + chunkH });
         // Corners
-        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y - chunkH });
-        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y - chunkH });
-        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x - chunkW, y: this.centerOrigin.y + chunkH });
-        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOrigin.x + chunkW, y: this.centerOrigin.y + chunkH });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOriginPosition.x - chunkW, y: this.centerOriginPosition.y - chunkH });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOriginPosition.x + chunkW, y: this.centerOriginPosition.y - chunkH });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOriginPosition.x - chunkW, y: this.centerOriginPosition.y + chunkH });
+        this.tilemapRenderer.renderFiltered(this.worldMap, layers, { x: this.camera.x, y: this.camera.y }, { x: this.centerOriginPosition.x + chunkW, y: this.centerOriginPosition.y + chunkH });
       }
     } else {
       this.backgroundRenderer.renderBackground(
@@ -792,13 +791,13 @@ export class GameEngine {
     }
 
     // Render building bases (below player) only in exterior
-    if (!this.isInterior) {
-      this.buildingRenderer.renderBuildingBases(this.gameAssets, { x: this.camera.x, y: this.camera.y }, this.houseWorld);
+    if (!this.isInsideBuilding) {
+      this.buildingRenderer.renderBuildingBases(this.gameAssets, { x: this.camera.x, y: this.camera.y }, this.houseWorldPosition);
       // Render storefront prop (bones) below player
       const imgStore = this.storefrontImage;
       if (imgStore && imgStore.complete && imgStore.naturalWidth > 0 && imgStore.naturalHeight > 0) {
-        const dx = Math.floor(this.storefrontWorld.x - Math.floor(imgStore.naturalWidth / 2) - this.camera.x);
-        const dy = Math.floor(this.storefrontWorld.y - imgStore.naturalHeight - this.camera.y);
+        const dx = Math.floor(this.storefrontWorldPosition.x - Math.floor(imgStore.naturalWidth / 2) - this.camera.x);
+        const dy = Math.floor(this.storefrontWorldPosition.y - imgStore.naturalHeight - this.camera.y);
         this.renderingContext.drawImage(imgStore, dx, dy);
       }
     }
@@ -825,8 +824,8 @@ export class GameEngine {
     this.renderEffects();
 
     // Render building roofs (above player) only in exterior
-    if (!this.isInterior) {
-      this.buildingRenderer.renderBuildingRoofs(this.gameAssets, { x: this.camera.x, y: this.camera.y }, this.houseWorld);
+    if (!this.isInsideBuilding) {
+      this.buildingRenderer.renderBuildingRoofs(this.gameAssets, { x: this.camera.x, y: this.camera.y }, this.houseWorldPosition);
     }
 
     // HUD and prompts (screen-space)
@@ -838,16 +837,16 @@ export class GameEngine {
     const ctx = this.renderingContext;
     const img = this.gameAssets.harvestSlashSprite;
     if (!img || !img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) {
-      this.activeEffects = [];
+      this.activeVisualEffects = [];
       return;
     }
     const { columns: hCols, rows: hRows } = HARVEST_EFFECT_CONFIG;
     const frameWSlash = Math.floor(img.naturalWidth / hCols);
     const frameHSlash = Math.floor(img.naturalHeight / hRows);
 
-    const effectsLeft: typeof this.activeEffects = [];
-    for (const e of this.activeEffects) {
-      const elapsed = (now - e.start) / 1000;
+    const effectsLeft: typeof this.activeVisualEffects = [];
+    for (const e of this.activeVisualEffects) {
+      const elapsed = (now - e.startTime) / 1000;
       const isSlash = e.kind === 'slash';
       const cfg = isSlash ? HARVEST_EFFECT_CONFIG : WATER_EFFECT_CONFIG;
       const imgKind = isSlash ? this.gameAssets.harvestSlashSprite : this.gameAssets.waterSprite;
@@ -883,7 +882,7 @@ export class GameEngine {
       );
       ctx.restore();
     }
-    this.activeEffects = effectsLeft;
+    this.activeVisualEffects = effectsLeft;
   }
 
   // hasActiveSlashEffect superseded by isEffectActive(kind)
@@ -892,9 +891,9 @@ export class GameEngine {
     const now = performance.now();
     const cfg = kind === 'slash' ? HARVEST_EFFECT_CONFIG : WATER_EFFECT_CONFIG;
     const secPerFrame = 1 / cfg.framesPerSecond;
-    for (const e of this.activeEffects) {
+    for (const e of this.activeVisualEffects) {
       if (e.kind !== kind) continue;
-      const elapsed = (now - e.start) / 1000;
+      const elapsed = (now - e.startTime) / 1000;
       if (Math.floor(elapsed / secPerFrame) < cfg.columns) return true;
     }
     return false;
@@ -903,9 +902,9 @@ export class GameEngine {
   private renderHUD(): void {
     const ctx = this.renderingContext;
     // Draw only fade overlay here; other HUD is drawn on the HUD canvas overlay
-    if (this.fadeTransition.active) {
+    if (this.fadeTransitionState.active) {
       const now = performance.now();
-      const t = Math.max(0, Math.min(1, (now - this.fadeTransition.start) / this.fadeTransition.duration));
+      const t = Math.max(0, Math.min(1, (now - this.fadeTransitionState.startTime) / this.fadeTransitionState.duration));
       const alpha = t < 0.5 ? (t / 0.5) : (1 - (t - 0.5) / 0.5);
       ctx.save();
       ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
@@ -919,7 +918,7 @@ export class GameEngine {
     const near = this.getFeetAdjacentInteraction();
     if (!near) {
       // Reset suppression when player leaves interaction range
-      this.suppressEmptyShipPrompt = false;
+      this.shouldSuppressEmptyShipPrompt = false;
       return null;
     }
     if (near.kind === 'enterHouse') return 'Press E to enter house';
@@ -930,7 +929,7 @@ export class GameEngine {
       const { items, coins } = this.computeSalePreview();
       if (items > 0) return `Press E to ship ${items} for ${coins} coins`;
       // Items are empty
-      return this.suppressEmptyShipPrompt ? null : 'Nothing to ship';
+      return this.shouldSuppressEmptyShipPrompt ? null : 'Nothing to ship';
     }
     if (near.kind === 'well') return 'Press E to fill water (TODO)';
     return null;
@@ -939,10 +938,10 @@ export class GameEngine {
   public getOverlayTexts(): { prompt: string | null; notifications: string[] } {
     // Filter notifications and return texts for HUD overlay rendering
     const now = performance.now();
-    this.notifications = this.notifications.filter(n => n.until > now);
+    this.gameNotifications = this.gameNotifications.filter(n => n.expirationTime > now);
     return {
       prompt: this.getInteractionPrompt(),
-      notifications: this.notifications.map(n => n.text),
+      notifications: this.gameNotifications.map(n => n.text),
     };
   }
 
@@ -971,12 +970,12 @@ export class GameEngine {
       try {
         const interior = await this.mapLoader.loadMap('/src/assets/maps/Interior1.tmx');
         this.worldMap = interior;
-        this.isInterior = true;
+        this.isInsideBuilding = true;
         // Reset camera/world to interior extents
         const tile = TILE_CONFIG.tileSize;
         const worldW = interior.widthTiles * tile;
         const worldH = interior.heightTiles * tile;
-        this.centerOrigin = { x: 0, y: 0 }; // interior drawn at world origin
+        this.centerOriginPosition = { x: 0, y: 0 }; // interior drawn at world origin
         this.camera.setWorldSize(worldW, worldH);
         this.playerMovement.setWorldSize(worldW, worldH);
         // Spawn at door inside. Current spawn reported is too far bottom-right.
@@ -1012,24 +1011,24 @@ export class GameEngine {
       try {
         const exterior = await this.mapLoader.loadMap('/src/assets/maps/homeMap.tmj');
         this.worldMap = exterior;
-        this.isInterior = false;
+        this.isInsideBuilding = false;
         const tile = TILE_CONFIG.tileSize;
         const baseW = exterior.widthTiles * tile;
         const baseH = exterior.heightTiles * tile;
-        this.centerOrigin = { x: baseW, y: baseH };
+        this.centerOriginPosition = { x: baseW, y: baseH };
         const worldW = baseW * 3;
         const worldH = baseH * 3;
         this.camera.setWorldSize(worldW, worldH);
         this.playerMovement.setWorldSize(worldW, worldH);
         // Place player outside the door, just below the house
         const p = this.playerMovement.getPlayerCharacter();
-        const outX = this.centerOrigin.x + Math.floor((HOUSE_CONFIG.tileX + 0.5) * tile);
-        const outY = this.centerOrigin.y + Math.floor((HOUSE_CONFIG.tileY + 2) * tile);
+        const outX = this.centerOriginPosition.x + Math.floor((HOUSE_CONFIG.tileX + 0.5) * tile);
+        const outY = this.centerOriginPosition.y + Math.floor((HOUSE_CONFIG.tileY + 2) * tile);
         p.xPosition = outX;
         p.yPosition = outY;
         this.camera.follow(p.xPosition, p.yPosition);
         // Recompute house world and interactions
-        this.houseWorld = { x: this.centerOrigin.x + Math.floor((HOUSE_CONFIG.tileX + 0.5) * tile), y: this.centerOrigin.y + Math.floor((HOUSE_CONFIG.tileY + 1) * tile) };
+        this.houseWorldPosition = { x: this.centerOriginPosition.x + Math.floor((HOUSE_CONFIG.tileX + 0.5) * tile), y: this.centerOriginPosition.y + Math.floor((HOUSE_CONFIG.tileY + 1) * tile) };
         // Restore exterior collision state (no static collisions on exterior map)
         this.staticCollisionRects = [];
         this.buildInteractionAreas();
@@ -1042,8 +1041,8 @@ export class GameEngine {
     });
   }
 
-  private startFadeTransition(onMid: () => Promise<void> | void, durationMs = 600): void {
-    this.fadeTransition = { active: true, start: performance.now(), duration: durationMs, midFired: false, onMid };
+  private startFadeTransition(onMidPointCallback: () => Promise<void> | void, durationMs = 600): void {
+    this.fadeTransitionState = { active: true, startTime: performance.now(), duration: durationMs, midPointFired: false, onMidPointCallback };
   }
 
   private buildInteriorCollisions(): void {
@@ -1089,7 +1088,7 @@ export class GameEngine {
   }
 
   private pushNotification(text: string, durationMs = 1800): void {
-    this.notifications.push({ text, until: performance.now() + durationMs });
+    this.gameNotifications.push({ text, expirationTime: performance.now() + durationMs });
   }
 
   // Collision debug overlay removed per request
@@ -1097,7 +1096,7 @@ export class GameEngine {
   // Utility methods for debugging
   public getGameStats(): any {
     return {
-      isRunning: this.isRunning,
+      isRunning: this.isGameRunning,
       assetsLoaded: this.assetLoader.areAllAssetsLoaded(),
       loadingProgress: this.assetLoader.getLoadingProgress(),
       plantCount: this.plantManagement.getPlantCount(),
@@ -1117,19 +1116,19 @@ export class GameEngine {
     // Navigation
     const up = this.keyboardInput.isKeyPressed('arrowup');
     const down = this.keyboardInput.isKeyPressed('arrowdown');
-    if (up && !this.wasUpPressed) {
-      this.shopSelected = (this.shopSelected - 1 + this.shopItems.length) % this.shopItems.length;
+    if (up && !this.wasUpArrowPressed) {
+      this.selectedShopItemIndex = (this.selectedShopItemIndex - 1 + this.availableShopItems.length) % this.availableShopItems.length;
     }
-    if (down && !this.wasDownPressed) {
-      this.shopSelected = (this.shopSelected + 1) % this.shopItems.length;
+    if (down && !this.wasDownArrowPressed) {
+      this.selectedShopItemIndex = (this.selectedShopItemIndex + 1) % this.availableShopItems.length;
     }
-    this.wasUpPressed = up;
-    this.wasDownPressed = down;
+    this.wasUpArrowPressed = up;
+    this.wasDownArrowPressed = down;
 
     // Purchase
     const enter = this.keyboardInput.isKeyPressed('enter');
-    if (enter && !this.wasEnterPressed) {
-      const item = this.shopItems[this.shopSelected];
+    if (enter && !this.wasEnterKeyPressed) {
+      const item = this.availableShopItems[this.selectedShopItemIndex];
       if (this.inventory.spendCoins(item.price)) {
         this.addSeedsToInventory(item.plantType, 1);
         this.pushNotification(`Bought ${item.plantType} seed`);
@@ -1137,29 +1136,29 @@ export class GameEngine {
         this.pushNotification('Not enough coins');
       }
     }
-    this.wasEnterPressed = enter;
+    this.wasEnterKeyPressed = enter;
 
     // Close
     const esc = this.keyboardInput.isKeyPressed('escape');
-    if (esc && !this.wasEscPressed) {
-      this.shopOpen = false;
+    if (esc && !this.wasEscapeKeyPressed) {
+      this.isShopOpen = false;
     }
-    this.wasEscPressed = esc;
+    this.wasEscapeKeyPressed = esc;
   }
 
   private addSeedsToInventory(plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom', amount: number): void {
     // Find slot with same seed type
-    let idx = this.inventorySlots.findIndex(it => it && it.kind === 'seed' && it.plantType === plantType);
-    if (idx < 0) idx = this.inventorySlots.findIndex(it => it === null);
+    let idx = this.playerInventorySlots.findIndex(it => it && it.kind === 'seed' && it.plantType === plantType);
+    if (idx < 0) idx = this.playerInventorySlots.findIndex(it => it === null);
     if (idx < 0) { this.pushNotification('Inventory full'); return; }
-    const existing = this.inventorySlots[idx];
-    if (!existing) this.inventorySlots[idx] = { kind: 'seed', plantType, count: amount };
+    const existing = this.playerInventorySlots[idx];
+    if (!existing) this.playerInventorySlots[idx] = { kind: 'seed', plantType, count: amount };
     else (existing as any).count += amount;
   }
 
 
   public getShopView(): { open: boolean; items: Array<{ plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; price: number }>; selectedIndex: number; coins: number } {
-    return { open: this.shopOpen, items: this.shopItems, selectedIndex: this.shopSelected, coins: this.inventory.getCoins() };
+    return { open: this.isShopOpen, items: this.availableShopItems, selectedIndex: this.selectedShopItemIndex, coins: this.inventory.getCoins() };
   }
 
 
@@ -1182,7 +1181,7 @@ export class GameEngine {
     const count = 3 + Math.floor(Math.random() * 2); // 3 or 4
     const pick = catalog.slice(0, count);
     const s = seasonIndex !== undefined ? ((seasonIndex % 4) + 4) % 4 : undefined;
-    this.shopItems = pick.map(p => {
+    this.availableShopItems = pick.map(p => {
       let delta = Math.floor(Math.random() * 5) - 2; // -2..+2
       if (s !== undefined) {
         if (s === 0 && p.plantType === 'mushroom') delta -= 1; // spring
@@ -1192,6 +1191,6 @@ export class GameEngine {
       }
       return { plantType: p.plantType, price: Math.max(1, p.basePrice + delta) };
     });
-    this.shopSelected = 0;
+    this.selectedShopItemIndex = 0;
   }
 }

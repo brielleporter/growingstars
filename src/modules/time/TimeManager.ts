@@ -25,16 +25,16 @@ export class TimeManager {
   }
 
   public getCurrentGameTime(): GameTime {
-    const tRatio = this.state.secondsIntoDay / this.state.dayDurationSeconds; // 0-1
-    const totalMinutes = Math.floor(tRatio * 24 * 60);
-    const hour = Math.floor(totalMinutes / 60) % 24;
-    const totalHours = (this.state.day - 1) * 24 + hour;
+    const dayProgressRatio = this.state.secondsIntoDay / this.state.dayDurationSeconds; // 0-1
+    const totalMinutesInCurrentDay = Math.floor(dayProgressRatio * 24 * 60);
+    const currentHour = Math.floor(totalMinutesInCurrentDay / 60) % 24;
+    const totalHoursFromDayOne = (this.state.day - 1) * 24 + currentHour;
     
-    return { day: this.state.day, hour, totalHours };
+    return { day: this.state.day, hour: currentHour, totalHours: totalHoursFromDayOne };
   }
 
-  public updateTime(deltaTime: number): void {
-    this.state.secondsIntoDay += deltaTime;
+  public updateTime(deltaTimeSeconds: number): void {
+    this.state.secondsIntoDay += deltaTimeSeconds;
     
     // Handle day rollover
     if (this.state.secondsIntoDay >= this.state.dayDurationSeconds) {
@@ -67,19 +67,19 @@ export class TimeManager {
     this.notifyListeners();
   }
 
-  public addListener(callback: (state: TimeState) => void): void {
-    this.listeners.push(callback);
+  public addListener(listenerCallback: (state: TimeState) => void): void {
+    this.listeners.push(listenerCallback);
   }
 
-  public removeListener(callback: (state: TimeState) => void): void {
-    const index = this.listeners.indexOf(callback);
-    if (index > -1) {
-      this.listeners.splice(index, 1);
+  public removeListener(listenerCallback: (state: TimeState) => void): void {
+    const listenerIndex = this.listeners.indexOf(listenerCallback);
+    if (listenerIndex > -1) {
+      this.listeners.splice(listenerIndex, 1);
     }
   }
 
   private notifyListeners(): void {
-    const stateCopy = { ...this.state };
-    this.listeners.forEach(listener => listener(stateCopy));
+    const currentStateCopy = { ...this.state };
+    this.listeners.forEach(listenerCallback => listenerCallback(currentStateCopy));
   }
 }
