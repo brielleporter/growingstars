@@ -39,13 +39,17 @@ export class GameEngine {
   private mapLoader: MapLoader;
   private tilemapRenderer: TilemapRenderer;
   private worldMap: LoadedMap | null = null;
-  private interactionAreas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' }>=[];
+  private interactionAreas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' | 'storefront' }>=[];
   private staticCollisionRects: Array<{ x: number; y: number; w: number; h: number }>=[];
   private camera!: Camera;
   private centerOrigin = { x: 0, y: 0 };
   private houseWorld = { x: 0, y: 0 };
   private isInterior = false;
   private fadeTransition: { active: boolean; start: number; duration: number; midFired: boolean; onMid?: () => Promise<void> | void } = { active: false, start: 0, duration: 600, midFired: false };
+  // Storefront prop (bones)
+  private storefrontImage: HTMLImageElement | null = null;
+  private storefrontWorld = { x: 0, y: 0 };
+  private storefrontCollision: { x: number; y: number; w: number; h: number } | null = null;
 
   // Game state
   private gameAssets!: GameAssets;
@@ -178,6 +182,38 @@ export class GameEngine {
     if (this.gameAssets.playerSprite.complete) {
       this.initializeSpriteDimensions();
     }
+
+    // Compute storefront world position precisely one chunk above the house baseline
+    if (this.worldMap) {
+      const tile = TILE_CONFIG.tileSize;
+      const chunkH = this.worldMap.heightTiles * tile;
+      const storeX = this.houseWorld.x;
+      const storeY = this.houseWorld.y - chunkH;
+      this.storefrontWorld = { x: storeX, y: storeY };
+      // Collision aligned to the storefront's bottom tile (same baseline as image)
+      this.storefrontCollision = { x: Math.floor(storeX - tile / 2), y: Math.floor(storeY - tile), w: tile, h: tile };
+    }
+
+    // Load storefront image (bonesShadow21) and align collision to the drawn PNG bounds
+    this.storefrontImage = new Image();
+    this.storefrontImage.onload = () => {
+      const img = this.storefrontImage!;
+      const w0 = img.naturalWidth;
+      const h0 = img.naturalHeight;
+      const tile = TILE_CONFIG.tileSize;
+      // Horizontal crop: 3 tiles per side (already correct per feedback)
+      const shrinkX = 3 * tile;
+      const w = Math.max(tile, w0 - shrinkX * 2);
+      const x = Math.floor(this.storefrontWorld.x - Math.floor(w0 / 2) + shrinkX);
+      // Vertical crop: reduce front/south (bottom) by 1 tile, and bring in above (top) by 3 tiles
+      const cropTop = 3 * tile;
+      const cropBottom = 1 * tile;
+      const topY = this.storefrontWorld.y - h0;
+      const y = Math.floor(topY + cropTop);
+      const h = Math.max(tile, h0 - cropTop - cropBottom);
+      this.storefrontCollision = { x, y, w, h };
+    };
+    this.storefrontImage.src = '/src/assets/cursedLand/objectsSeparately/bonesShadow21.png';
 
     console.log('Game engine initialized successfully');
   }
@@ -555,6 +591,7 @@ export class GameEngine {
     const cx = Math.floor((dx + dw / 2) - cropW / 2);
     const cy = Math.floor(dy + dh - cropH);
     const combined = [...this.staticCollisionRects, { x: cx, y: cy, w: cropW, h: cropH }];
+    if (this.storefrontCollision) combined.push(this.storefrontCollision);
     this.playerMovement.setCollisionRects(combined);
   }
 
@@ -562,7 +599,7 @@ export class GameEngine {
     if (!this.worldMap) return;
     const tile = TILE_CONFIG.tileSize;
     const baseLayerOffset = { x: this.centerOrigin.x, y: this.centerOrigin.y };
-    const areas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' }> = [];
+    const areas: Array<{ x: number; y: number; w: number; h: number; kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' | 'storefront' }> = [];
     const addFromLayer = (name: string, kind: 'well' | 'ship' | 'bed') => {
       const layer = this.worldMap!.layers.find(l => l.name === name);
       if (!layer) return;
@@ -585,6 +622,10 @@ export class GameEngine {
       const doorX = Math.floor(this.houseWorld.x - tile / 2);
       const doorY = Math.floor(this.houseWorld.y - tile);
       areas.push({ x: doorX, y: doorY, w: tile, h: tile, kind: 'enterHouse' });
+      // Storefront interact area at bottom-center tile of the PNG
+      const tx = Math.floor(this.storefrontWorld.x / tile);
+      const ty = Math.floor((this.storefrontWorld.y - tile) / tile);
+      areas.push({ x: tx * tile, y: ty * tile, w: tile, h: tile, kind: 'storefront' });
     }
     if (this.isInterior && this.worldMap) {
       // Exit interaction at Tiled tile (1,6)
@@ -607,6 +648,8 @@ export class GameEngine {
       this.enterHouse();
     } else if (near.kind === 'exitHouse') {
       this.exitHouse();
+    } else if (near.kind === 'storefront') {
+      this.pushNotification('Storefront coming soon');
     } else if (near.kind === 'bed') {
       this.sleepAtBed();
     } else if (near.kind === 'ship') {
@@ -664,6 +707,13 @@ export class GameEngine {
     // Render building bases (below player) only in exterior
     if (!this.isInterior) {
       this.buildingRenderer.renderBuildingBases(this.gameAssets, { x: this.camera.x, y: this.camera.y }, this.houseWorld);
+      // Render storefront prop (bones) below player
+      const imgStore = this.storefrontImage;
+      if (imgStore && imgStore.complete && imgStore.naturalWidth > 0 && imgStore.naturalHeight > 0) {
+        const dx = Math.floor(this.storefrontWorld.x - Math.floor(imgStore.naturalWidth / 2) - this.camera.x);
+        const dy = Math.floor(this.storefrontWorld.y - imgStore.naturalHeight - this.camera.y);
+        this.renderingContext.drawImage(imgStore, dx, dy);
+      }
     }
 
     // Render plants
@@ -787,6 +837,7 @@ export class GameEngine {
     }
     if (near.kind === 'enterHouse') return 'Press E to enter house';
     if (near.kind === 'exitHouse') return 'Press E to exit house';
+    if (near.kind === 'storefront') return 'Press E to open store';
     if (near.kind === 'bed') return 'Press E to sleep';
     if (near.kind === 'ship') {
       const { items, coins } = this.computeSalePreview();
@@ -808,7 +859,7 @@ export class GameEngine {
     };
   }
 
-  private getFeetAdjacentInteraction(): { kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' } | null {
+  private getFeetAdjacentInteraction(): { kind: 'well' | 'ship' | 'enterHouse' | 'exitHouse' | 'bed' | 'storefront' } | null {
     const player = this.playerMovement.getPlayerCharacter();
     const spriteCfg = this.playerRenderer.getSpriteConfiguration();
     if (!spriteCfg.frameHeight) return null;
