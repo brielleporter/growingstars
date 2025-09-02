@@ -23,6 +23,8 @@ export class StaminaSystem {
   private timeManager: TimeManager;
   private onCoinsPenaltyCallback?: (amount: number) => void;
   private onNotificationCallback?: (message: string) => void;
+  private onAutoSleepCallback?: () => void;
+  private onAutoSleepRequestedCallback?: (complete: () => void) => void;
 
   constructor(
     timeManager: TimeManager,
@@ -58,6 +60,14 @@ export class StaminaSystem {
 
   public onNotificationRequested(notificationCallback: (message: string) => void): void {
     this.onNotificationCallback = notificationCallback;
+  }
+
+  public onAutoSleep(callback: () => void): void {
+    this.onAutoSleepCallback = callback;
+  }
+
+  public onAutoSleepRequested(callback: (complete: () => void) => void): void {
+    this.onAutoSleepRequestedCallback = callback;
   }
 
   public update(): void {
@@ -136,10 +146,14 @@ export class StaminaSystem {
     if (this.staminaState.current <= 0 && this.staminaState.lastPenaltyDay < currentGameTime.day) {
       this.onCoinsPenaltyCallback?.(-this.staminaConfig.midnightPenalty);
       this.onNotificationCallback?.(`You collapsed from exhaustion! Lost ${this.staminaConfig.midnightPenalty} coins.`);
+      // Notify listeners to play collapse animation
+      this.onAutoSleepCallback?.();
       this.staminaState.lastPenaltyDay = currentGameTime.day; // Track that we applied penalty for this day
       
-      // Auto-sleep: restore stamina and advance time to 7am
-      this.performAutoSleep();
+      // Allow the game to orchestrate visuals; advance time when complete()
+      const complete = () => { this.performAutoSleep(); };
+      if (this.onAutoSleepRequestedCallback) this.onAutoSleepRequestedCallback(complete);
+      else complete();
     }
   }
 

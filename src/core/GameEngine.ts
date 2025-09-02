@@ -3,7 +3,7 @@
  */
 
 import { GameAssets } from '../types/gameAssets.types';
-import { SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG, TILE_CONFIG, WORLD_CONFIG, HARVEST_EFFECT_CONFIG, WATER_EFFECT_CONFIG, HOUSE_CONFIG, PLANT_PRICES } from '../configuration/gameConstants';
+import { SPRITE_SHEET_CONFIG, SPRITE_DIRECTIONS, RENDER_CONFIG, TILE_CONFIG, WORLD_CONFIG, HARVEST_EFFECT_CONFIG, WATER_EFFECT_CONFIG, SLEEP_EFFECT_CONFIG, HOUSE_CONFIG, PLANT_PRICES } from '../configuration/gameConstants';
 import type { PlantEntity } from '../types/plantSystem.types';
 import { InventorySystem } from '../modules/inventory/InventorySystem';
 import { PlayerCharacter } from '../types/playerCharacter.types';
@@ -63,6 +63,7 @@ export class GameEngine {
   private previousFrameTimestamp = 0;
   private harvestingInputHandler?: () => void;
   private activeVisualEffects: Array<{ x: number; baselineY: number; startTime: number; kind: 'slash' | 'water'; row: number; targetHeight: number; targetPlant?: PlantEntity }> = [];
+  private sleepWorldAnim: { active: boolean; startTime: number; x: number; y: number } = { active: false, startTime: 0, x: 0, y: 0 };
   private gameNotifications: Array<{ text: string; expirationTime: number }> = [];
   private wasInteractionKeyPressed = false;
   private shouldSuppressEmptyShipPrompt = false;
@@ -87,6 +88,7 @@ export class GameEngine {
   private hoed: Set<string> = new Set();
   // Tiles that came pre-hoed in the map (center dirt 32,336) and should not be overwritten
   private lockedHoed: Set<string> = new Set();
+  private sleepSequenceTimer: number | null = null;
   // Player systems
   private staminaSystem?: StaminaSystem;
 
@@ -135,6 +137,60 @@ export class GameEngine {
     this.playerInventorySlots[3] = { kind: 'tool', toolType: 'hoe', count: 1 } as any;
   }
 
+  private renderSleepEffectWorld(): void {
+    if (!this.sleepWorldAnim.active) return;
+    const img = this.gameAssets.sleepSprite as HTMLImageElement;
+    if (!img || !img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) {
+      this.sleepWorldAnim.active = false;
+      return;
+    }
+    const now = performance.now();
+    const elapsed = (now - this.sleepWorldAnim.startTime) / 1000;
+    const secPerFrame = 1 / SLEEP_EFFECT_CONFIG.framesPerSecond;
+    const frame = Math.floor(elapsed / secPerFrame);
+    const frameW = Math.floor(img.naturalWidth / SLEEP_EFFECT_CONFIG.columns);
+    const frameH = img.naturalHeight; // 1 row
+    const sx = Math.min(frame, SLEEP_EFFECT_CONFIG.columns - 1) * frameW;
+    const sy = 0;
+
+    // Draw at player's world position with same display height as player
+    const playerCfg = this.playerRenderer.getSpriteConfiguration();
+    const playerDisplayH = playerCfg.frameHeight * RENDER_CONFIG.playerScale;
+    const drawH = Math.max(1, Math.floor(playerDisplayH));
+    const drawW = Math.max(1, Math.floor((frameW / frameH) * drawH));
+    const dx = Math.round(this.sleepWorldAnim.x - drawW / 2 - this.camera.x);
+    const dy = Math.round(this.sleepWorldAnim.y - drawH / 2 - this.camera.y);
+    this.renderingContext.save();
+    this.renderingContext.globalAlpha = 0.95;
+    this.renderingContext.drawImage(img, sx, sy, frameW, frameH, dx, dy, drawW, drawH);
+    this.renderingContext.restore();
+  }
+
+  private triggerSleepAnimation(): void {
+    const player = this.playerMovement.getPlayerCharacter();
+    this.sleepWorldAnim = { active: true, startTime: performance.now(), x: player.xPosition, y: player.yPosition };
+  }
+
+  private triggerSleepSequence(complete: () => void): void {
+    // Start/refresh animation at player position
+    this.triggerSleepAnimation();
+    const animMs = (SLEEP_EFFECT_CONFIG.columns / SLEEP_EFFECT_CONFIG.framesPerSecond) * 1000;
+    const holdMs = 700; // hold on last frame before fade
+    const fadeMs = 1200; // fade duration
+    if (this.sleepSequenceTimer) {
+      window.clearTimeout(this.sleepSequenceTimer);
+      this.sleepSequenceTimer = null;
+    }
+    // After animation + hold, start fade and advance day at midpoint
+    this.sleepSequenceTimer = window.setTimeout(() => {
+      const mid = async () => {
+        this.sleepWorldAnim.active = false;
+        await Promise.resolve(complete());
+      };
+      this.startFadeTransition(mid, fadeMs);
+    }, Math.max(0, Math.floor(animMs + holdMs)));
+  }
+
   private setupViewportCanvas(): void {
     const resizeCanvas = () => {
       this.canvas.width = window.innerWidth;
@@ -166,6 +222,14 @@ export class GameEngine {
     
     this.staminaSystem.onNotificationRequested((message) => {
       this.pushNotification(message);
+    });
+    // Play sleep collapse animation when auto-sleep triggers
+    this.staminaSystem.onAutoSleep(() => {
+      this.triggerSleepAnimation();
+    });
+    // Orchestrate hold + fade before advancing day
+    this.staminaSystem.onAutoSleepRequested((complete) => {
+      this.triggerSleepSequence(complete);
     });
     
     // Set up shop item refresh on day/season changes
@@ -822,7 +886,7 @@ export class GameEngine {
 
     // Render player character unless an effect should replace idle
     const playerForRender = this.playerMovement.getPlayerCharacter();
-    const replaceIdle = !playerForRender.isMoving && (this.isEffectActive('slash') || this.isEffectActive('water'));
+    const replaceIdle = this.sleepWorldAnim.active || (!playerForRender.isMoving && (this.isEffectActive('slash') || this.isEffectActive('water')));
     if (!replaceIdle) {
       this.playerRenderer.renderPlayerCharacter(
         playerForRender,
@@ -833,6 +897,9 @@ export class GameEngine {
 
     // Render effects (slash) above player
     this.renderEffects();
+
+    // Render sleep collapse in world-space (replaces player when active)
+    this.renderSleepEffectWorld();
 
     // Render building roofs (above player) only in exterior
     if (!this.isInsideBuilding) {
@@ -923,7 +990,9 @@ export class GameEngine {
       ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
       ctx.restore();
     }
+
   }
+
 
   private getInteractionPrompt(): string | null {
     const near = this.getFeetAdjacentInteraction();

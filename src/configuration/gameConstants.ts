@@ -55,6 +55,18 @@ export const WATER_EFFECT_CONFIG = {
   scale: 1.0,
 } as const;
 
+// Sleep collapse animation config (screen-space)
+export const SLEEP_EFFECT_CONFIG = {
+  /** Columns (frames) in the sleep sprite sheet */
+  columns: 6,
+  /** Single row */
+  rows: 1,
+  /** Playback fps for sleep animation */
+  framesPerSecond: 8,
+  /** Relative size as a fraction of min(canvasWidth, canvasHeight) */
+  screenScale: 0.25,
+} as const;
+
 // Tile configuration
 export const TILE_CONFIG = {
   /** Base square tile size in pixels */

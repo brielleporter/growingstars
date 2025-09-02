@@ -8,6 +8,7 @@ export const ASSET_PATHS: AssetPaths = {
   playerSpriteSheet: '/src/assets/sprites/walk.png',
   harvestSlashSpriteSheet: '/src/assets/sprites/slash.png',
   waterSpriteSheet: '/src/assets/sprites/water.png',
+  sleepSpriteSheet: '/src/assets/sprites/sleep.png',
   // Empty string means: use procedural barren background
   homeBackground: '',
   barrenBackground: '',

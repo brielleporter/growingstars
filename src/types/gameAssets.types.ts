@@ -11,6 +11,8 @@ export interface GameAssets {
   harvestSlashSprite: HTMLImageElement;
   /** Watering effect sprite sheet */
   waterSprite: HTMLImageElement;
+  /** Sleep collapse sprite sheet (6 frames) */
+  sleepSprite: HTMLImageElement;
   /** Home background image */
   homeBackground: HTMLImageElement;
   /** Barren/alien background image (optional, may be empty path) */
@@ -35,6 +37,8 @@ export interface AssetPaths {
   harvestSlashSpriteSheet: string;
   /** Path to watering effect sprite sheet */
   waterSpriteSheet: string;
+  /** Path to sleep collapse sprite sheet */
+  sleepSpriteSheet: string;
   /** Path to home background */
   homeBackground: string;
   /** Path to barren background (can be empty to use procedural) */
