@@ -72,8 +72,7 @@ export class GameEngine {
   private hudDisplaySeedType: string = 'sprout';
   private hudDisplaySeedCount: number = 12;
   // Bottom inventory bar
-<<<<<<< HEAD
-  private playerInventorySlots: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; count: number } | null> = [];
+  private playerInventorySlots: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; toolType?: 'hoe' | 'wrench'; count: number } | null> = [];
   private selectedInventorySlotIndex = 0;
   private wasLeftArrowPressed = false;
   private wasRightArrowPressed = false;
@@ -84,22 +83,11 @@ export class GameEngine {
   private wasEscapeKeyPressed = false;
   // Player systems
   // timeManager is passed to setTimeManager but not stored as it's managed externally
-=======
-  private inventorySlots: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; toolType?: 'hoe' | 'wrench'; count: number } | null> = [];
   // Track hoed tiles (within base chunk coords)
   private hoed: Set<string> = new Set();
   // Tiles that came pre-hoed in the map (center dirt 32,336) and should not be overwritten
   private lockedHoed: Set<string> = new Set();
-  private selectedSlot = 0;
-  private wasLeftPressed = false;
-  private wasRightPressed = false;
-  private wasSpacePressed = false;
-  private wasUpPressed = false;
-  private wasDownPressed = false;
-  private wasEnterPressed = false;
-  private wasEscPressed = false;
   // Player systems
->>>>>>> bca5842 (feat(hoe): 3x3 patch placement, autotile edges/corners; respect existing center dirt; fix corner orientation; expand retile radius; add hoe tool icon and usage)
   private staminaSystem?: StaminaSystem;
 
   constructor(canvasElementId: string) {
@@ -140,18 +128,11 @@ export class GameEngine {
     this.camera = new Camera();
     this.camera.setViewport(this.canvas.width, this.canvas.height);
     // Initialize inventory bar (8 slots)
-<<<<<<< HEAD
     this.playerInventorySlots = new Array(8).fill(null);
     this.playerInventorySlots[0] = { kind: 'seed', plantType: 'eye', count: 6 };
     this.playerInventorySlots[1] = { kind: 'seed', plantType: 'tentacle', count: 6 };
     this.playerInventorySlots[2] = { kind: 'seed', plantType: 'spike', count: 6 };
-=======
-    this.inventorySlots = new Array(8).fill(null);
-    this.inventorySlots[0] = { kind: 'seed', plantType: 'eye', count: 6 } as any;
-    this.inventorySlots[1] = { kind: 'seed', plantType: 'tentacle', count: 6 } as any;
-    this.inventorySlots[2] = { kind: 'seed', plantType: 'spike', count: 6 } as any;
-    this.inventorySlots[3] = { kind: 'tool', toolType: 'hoe', count: 1 } as any;
->>>>>>> bca5842 (feat(hoe): 3x3 patch placement, autotile edges/corners; respect existing center dirt; fix corner orientation; expand retile radius; add hoe tool icon and usage)
+    this.playerInventorySlots[3] = { kind: 'tool', toolType: 'hoe', count: 1 } as any;
   }
 
   private setupViewportCanvas(): void {
@@ -330,7 +311,7 @@ export class GameEngine {
     };
   }
 
-  public getInventoryView(): { items: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; count: number } | null>; selectedIndex: number } {
+  public getInventoryView(): { items: Array<{ kind: 'seed'; plantType: 'eye' | 'tentacle' | 'jaws' | 'spike' | 'orb' | 'mushroom'; count: number } | { kind: 'tool'; toolType?: 'hoe' | 'wrench'; count: number } | null>; selectedIndex: number } {
     return { items: this.playerInventorySlots, selectedIndex: this.selectedInventorySlotIndex };
   }
 
@@ -1230,8 +1211,8 @@ export class GameEngine {
     const tileSize = TILE_CONFIG.tileSize;
     const player = this.playerMovement.getPlayerCharacter();
     const target = this.calculatePlantingPosition(player);
-    const cx = Math.floor((target.x - this.centerOrigin.x) / tileSize);
-    const cy = Math.floor((target.y - this.centerOrigin.y) / tileSize);
+    const cx = Math.floor((target.x - this.centerOriginPosition.x) / tileSize);
+    const cy = Math.floor((target.y - this.centerOriginPosition.y) / tileSize);
     if (cx < 0 || cy < 0 || cx >= this.worldMap.widthTiles || cy >= this.worldMap.heightTiles) return;
 
     // Mark a full 3x3 patch centered at (cx, cy) as hoed

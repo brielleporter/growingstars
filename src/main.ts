@@ -191,58 +191,45 @@ if (document.readyState === 'loading') {
             itemContext.restore();
             return;
           }
-<<<<<<< HEAD
-          // Tools: simple glyph
-          itemContext.save();
-          itemContext.strokeStyle = '#89ffe8';
-          itemContext.lineWidth = 2;
-          const toolIconCenterX = xPosition + slotSize * 0.5;
-          const toolIconCenterY = yPosition + slotSize * 0.5;
-          itemContext.beginPath();
-          itemContext.arc(toolIconCenterX - 4, toolIconCenterY - 6, 5, Math.PI * 0.3, Math.PI * 1.7);
-          itemContext.moveTo(toolIconCenterX - 1, toolIconCenterY - 2);
-          itemContext.lineTo(toolIconCenterX + 6, toolIconCenterY + 6);
-          itemContext.stroke();
-          itemContext.restore();
-=======
-          // Tools: draw hoe icon if toolType present
-          if ((item as any).toolType === 'hoe') {
-            const pad = 6;
-            const x1 = x + pad, y1 = y + size - pad;
-            const x2 = x + size - pad, y2 = y + pad;
-            ictx.save();
-            ictx.strokeStyle = '#c8a26a';
-            ictx.lineWidth = 3;
-            ictx.lineCap = 'round';
-            ictx.beginPath();
-            ictx.moveTo(x1, y1);
-            ictx.lineTo(x2, y2);
-            ictx.stroke();
-            const bx = x2 - 4, by = y2 + 2;
-            ictx.fillStyle = '#43ffd9';
-            ictx.shadowColor = '#43ffd9';
-            ictx.shadowBlur = 6;
-            ictx.beginPath();
-            ictx.moveTo(bx, by);
-            ictx.lineTo(bx + 8, by + 2);
-            ictx.lineTo(bx + 4, by + 8);
-            ictx.closePath();
-            ictx.fill();
-            ictx.shadowBlur = 0;
-            ictx.restore();
+          // Tools: draw hoe icon if present; else default wrench-like glyph
+          const tool = inventoryItem as any;
+          if (tool.toolType === 'hoe') {
+            const iconPadding = 6;
+            const x1 = xPosition + iconPadding, y1 = yPosition + slotSize - iconPadding;
+            const x2 = xPosition + slotSize - iconPadding, y2 = yPosition + iconPadding;
+            itemContext.save();
+            itemContext.strokeStyle = '#c8a26a';
+            itemContext.lineWidth = 3;
+            itemContext.lineCap = 'round';
+            itemContext.beginPath();
+            itemContext.moveTo(x1, y1);
+            itemContext.lineTo(x2, y2);
+            itemContext.stroke();
+            const bladeX = x2 - 4, bladeY = y2 + 2;
+            itemContext.fillStyle = '#43ffd9';
+            itemContext.shadowColor = '#43ffd9';
+            itemContext.shadowBlur = 6;
+            itemContext.beginPath();
+            itemContext.moveTo(bladeX, bladeY);
+            itemContext.lineTo(bladeX + 8, bladeY + 2);
+            itemContext.lineTo(bladeX + 4, bladeY + 8);
+            itemContext.closePath();
+            itemContext.fill();
+            itemContext.shadowBlur = 0;
+            itemContext.restore();
           } else {
-            ictx.save();
-            ictx.strokeStyle = '#89ffe8';
-            ictx.lineWidth = 2;
-            const cx = x + size * 0.5, cy = y + size * 0.5;
-            ictx.beginPath();
-            ictx.arc(cx - 4, cy - 6, 5, Math.PI * 0.3, Math.PI * 1.7);
-            ictx.moveTo(cx - 1, cy - 2);
-            ictx.lineTo(cx + 6, cy + 6);
-            ictx.stroke();
-            ictx.restore();
+            itemContext.save();
+            itemContext.strokeStyle = '#89ffe8';
+            itemContext.lineWidth = 2;
+            const toolIconCenterX = xPosition + slotSize * 0.5;
+            const toolIconCenterY = yPosition + slotSize * 0.5;
+            itemContext.beginPath();
+            itemContext.arc(toolIconCenterX - 4, toolIconCenterY - 6, 5, Math.PI * 0.3, Math.PI * 1.7);
+            itemContext.moveTo(toolIconCenterX - 1, toolIconCenterY - 2);
+            itemContext.lineTo(toolIconCenterX + 6, toolIconCenterY + 6);
+            itemContext.stroke();
+            itemContext.restore();
           }
->>>>>>> bca5842 (feat(hoe): 3x3 patch placement, autotile edges/corners; respect existing center dirt; fix corner orientation; expand retile radius; add hoe tool icon and usage)
         });
         // Prompt and notifications above the inventory bar
         if (typeof gameEngineForHUD.getOverlayTexts === 'function') {
