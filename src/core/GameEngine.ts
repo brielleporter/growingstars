@@ -171,6 +171,19 @@ export class GameEngine {
     this.sleepWorldAnim = { active: true, startTime: performance.now(), x: player.xPosition, y: player.yPosition };
   }
 
+  private isDirtTileAtWorld(x: number, y: number): boolean {
+    if (!this.worldMap) return false;
+    const tileSize = TILE_CONFIG.tileSize;
+    const tx = Math.floor((x - this.centerOriginPosition.x) / tileSize);
+    const ty = Math.floor((y - this.centerOriginPosition.y) / tileSize);
+    if (tx < 0 || ty < 0 || tx >= this.worldMap.widthTiles || ty >= this.worldMap.heightTiles) return false;
+    const dirtLayer = this.worldMap.layers.find(l => l.name.toLowerCase().includes('dirt'));
+    if (!dirtLayer) return false;
+    const idx = ty * this.worldMap.widthTiles + tx;
+    const gid = dirtLayer.data[idx] | 0;
+    return gid !== 0;
+  }
+
   private triggerSleepSequence(complete: () => void): void {
     // Start/refresh animation at player position
     this.triggerSleepAnimation();
@@ -412,6 +425,10 @@ export class GameEngine {
     if (it.kind === 'seed') {
       const player = this.playerMovement.getPlayerCharacter();
       const plantingPosition = this.calculatePlantingPosition(player);
+      if (!this.isDirtTileAtWorld(plantingPosition.x, plantingPosition.y)) {
+        this.pushNotification('You can only plant in dirt');
+        return;
+      }
       const planted = this.plantManagement.handlePlantingClick(plantingPosition, it.plantType as any);
       if (planted) {
         this.consumeOneSeed();
@@ -448,6 +465,11 @@ export class GameEngine {
           const player = this.playerMovement.getPlayerCharacter();
           const plantingPosition = this.calculatePlantingPosition(player);
           if (this.hasAnySeeds()) {
+            if (!this.isDirtTileAtWorld(plantingPosition.x, plantingPosition.y)) {
+              this.pushNotification('You can only plant in dirt');
+              lastPlantTime = currentTime; // debounce to avoid spam
+              return;
+            }
             const seedType = this.getSelectedSeedType();
             const planted = this.plantManagement.handlePlantingClick(plantingPosition, seedType ?? undefined);
             if (planted) this.consumeOneSeed(); else this.pushNotification('Too close to another plant');
